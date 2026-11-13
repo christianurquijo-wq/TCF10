@@ -63,8 +63,11 @@ def _normalizar(df: pd.DataFrame, mapa: dict) -> pd.DataFrame:
 
 def _si(serie: pd.Series) -> pd.Series:
     """'SI', 'Sí', 'TRUE', '1', 'X' -> True; vacío -> None (sin dato); el resto -> False."""
-    texto = serie.astype("string").str.strip().str.upper()
-    return texto.map(lambda v: None if pd.isna(v) or v == "" else v in {"SI", "SÍ", "TRUE", "1", "X", "VERDADERO"})
+    si = {"SI", "SÍ", "TRUE", "1", "X", "VERDADERO"}
+    valores = [None if v is None or (not isinstance(v, str) and pd.isna(v)) or str(v).strip() == ""
+               else str(v).strip().upper() in si for v in serie.tolist()]
+    # dtype object explícito: con pandas 3 + pyarrow una columna toda vacía se volvía Arrow y fillna(False) fallaba
+    return pd.Series(valores, index=serie.index, dtype=object)
 
 
 def limpiar_beneficiarios(crudo: pd.DataFrame) -> pd.DataFrame:

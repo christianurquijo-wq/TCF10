@@ -21,6 +21,21 @@ def _n(x) -> str:
     return f"{x:,.0f}".replace(",", ".")
 
 
+def _marcados(df: pd.DataFrame, col: str) -> pd.Series:
+    """True/False por fila sin depender del dtype (object, boolean o Arrow). Vacío cuenta como False."""
+    if col not in df:
+        return pd.Series(False, index=df.index)
+    def es_si(v) -> bool:
+        if isinstance(v, (bool, np.bool_)):
+            return bool(v)
+        return isinstance(v, str) and v.strip().upper() in {"SI", "SÍ", "TRUE", "1", "X", "VERDADERO"}
+    return pd.Series([es_si(v) for v in df[col].tolist()], index=df.index, dtype=bool)
+
+
+def _hay_dato(df: pd.DataFrame, col: str) -> bool:
+    return col in df and any(v is not None and v is not pd.NA and not (isinstance(v, float) and np.isnan(v)) for v in df[col].tolist())
+
+
 def _redondear_pct(x: float | None) -> int | None:
     """Nota general 3 del ET: el índice se redondea a entero (REDONDEAR(n; 0) de Excel)."""
     if x is None or pd.isna(x):
@@ -124,16 +139,16 @@ def pagos(df: pd.DataFrame) -> list[dict]:
         "medible": enrolados > 0, "estado": "En curso" if enrolados else "Sin datos",
     })
 
-    certificados = int(df.get("certificado", pd.Series(False, index=df.index)).fillna(False).astype(bool).sum())
-    hay_cert = "certificado" in df and df["certificado"].notna().any()
+    certificados = int(_marcados(df, "certificado").sum())
+    hay_cert = _hay_dato(df, "certificado")
     salida.append(_indice("exito", certificados, culminados, medible=bool(hay_cert and culminados),
                           final=todas_cerradas,
                           detalle=f"{_n(certificados)} certificados de {_n(culminados)} que culminaron"))
 
     base_tml = df[df["poblacion"].eq("Abierta") & df["culmino"]
                   & df["lab_inicio"].isin(["Desempleado", "No formal"])]
-    formales = int(base_tml.get("formal_t3", pd.Series(dtype=bool)).fillna(False).astype(bool).sum())
-    hay_pila = "formal_t3" in df and df["formal_t3"].notna().any()
+    formales = int(_marcados(base_tml, "formal_t3").sum())
+    hay_pila = _hay_dato(df, "formal_t3")
     salida.append(_indice("tml", formales, len(base_tml), medible=bool(hay_pila and len(base_tml)),
                           final=todas_cerradas,
                           detalle=f"{_n(formales)} formales en PILA de {_n(len(base_tml))} (convocatoria abierta)"))
