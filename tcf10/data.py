@@ -4,8 +4,9 @@ Carga de datos de TCF10.
   beneficiarios + cohortes  Google Sheet operativo (base entregada por Atenea + estado operativo que
                             actualiza el equipo: grupo, docente, gestor, franja, retiros, certificación,
                             situación laboral). Pestañas BENEFICIARIOS y COHORTES.
-  avance                    SIS de Kuepa en BigQuery (queries/avance_sis.sql), filtrado por los ID SIS
-                            de la base: horas sincrónicas (asistencia) y asincrónicas (plataforma).
+  avance                    Vistas VTD10 del SIS (DVTD_SIS) en BigQuery (queries/avance_sis.sql), cruzadas
+                            por ID SIS = incremental: sincrónicas = sesiones asistidas × horas_por_sesion;
+                            asincrónicas = time_view a nivel de curso ÷ divisor_time_view.
 
 Si faltan los secrets ([tcf10] y [gcp_service_account]) la app usa los datos de demostración de
 data/demo/ y lo avisa con un banner: sirve para probar sin tocar datos reales.
@@ -99,7 +100,13 @@ def limpiar_avance(crudo: pd.DataFrame) -> pd.DataFrame:
     df["id_sis"] = pd.to_numeric(df["id_sis"], errors="coerce").astype("Int64")
     df["ultima_actividad"] = pd.to_datetime(df["ultima_actividad"], errors="coerce")
     df.loc[df["ultima_actividad"].dt.year < 2000, "ultima_actividad"] = pd.NaT  # sin actividad (1970 en el SQL)
-    return df[["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad"]]
+    for c in ("horas_sinc", "horas_asinc"):
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+    # columnas opcionales (las trae el SIS real; el demo no)
+    for c in ("grupo_sis", "actualizado_sis"):
+        if c not in df:
+            df[c] = None
+    return df[["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis", "actualizado_sis"]]
 
 
 # ------------------------------------------------------------------ fuentes
@@ -140,7 +147,9 @@ def _avance_bigquery(ids: tuple[int, ...]) -> pd.DataFrame:
     cliente = bigquery.Client(credentials=creds, project=cfg.get("bq_project", creds.project_id))
     sql = SQL_AVANCE.read_text(encoding="utf-8").replace("{dataset}", cfg["sis_dataset"])
     params = [bigquery.ArrayQueryParameter("ids_sis", "INT64", list(ids)),
-              bigquery.ScalarQueryParameter("horas_sesion", "FLOAT64", float(cfg.get("horas_por_sesion", 3.0)))]
+              bigquery.ScalarQueryParameter("horas_sesion", "FLOAT64", float(cfg.get("horas_por_sesion", 3.0))),
+              # time_view en segundos → 3600; en minutos → 60 (validar con queries/validar_unidades.sql)
+              bigquery.ScalarQueryParameter("divisor_tiempo", "FLOAT64", float(cfg.get("divisor_time_view", 3600)))]
     return cliente.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).to_dataframe()
 
 
@@ -156,8 +165,17 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
     cohortes = limpiar_cohortes(_leer_sheet(cfg.get("pestana_cohortes", "COHORTES")))
     ids = tuple(int(x) for x in benef["id_sis"].dropna().unique())
     avance = limpiar_avance(_avance_bigquery(ids)) if ids else pd.DataFrame(
-        columns=["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad"])
+        columns=["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis", "actualizado_sis"])
+    benef = _completar_grupo(benef, avance)
     return benef, avance, cohortes, False
+
+
+def _completar_grupo(benef: pd.DataFrame, avance: pd.DataFrame) -> pd.DataFrame:
+    """El Sheet manda; si el grupo viene vacío se usa el grupo principal del SIS."""
+    grupos = avance.dropna(subset=["grupo_sis"]).set_index("id_sis")["grupo_sis"]
+    vacio = benef["grupo"].eq("Sin dato")
+    benef.loc[vacio, "grupo"] = benef.loc[vacio, "id_sis"].map(grupos).fillna("Sin dato")
+    return benef
 
 
 def refrescar() -> None:

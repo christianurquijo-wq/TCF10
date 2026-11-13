@@ -25,7 +25,8 @@ pytest -q
    - **COHORTES**: cohorte, fecha_inicio, fecha_fin, tipo
 2. Compartir el Sheet (lector) con la cuenta de servicio y darle `BigQuery Data Viewer` + `Job User` sobre el dataset del SIS.
 3. Copiar `.streamlit/secrets.toml.example` → secrets (local) o pegar en Streamlit Cloud › Settings › Secrets.
-4. Validar `queries/avance_sis.sql` contra el dataset real y ajustar `horas_por_sesion`.
+4. Correr `queries/validar_unidades.sql` en la consola de BigQuery y ajustar `horas_por_sesion` y `divisor_time_view`.
+5. La cuenta de servicio necesita `BigQuery Data Viewer` sobre `DVTD_SIS` **y** sobre `DSTD_SIS`/`DSGE_SIS` (las vistas leen esas tablas), más `BigQuery Job User` en `bq_project`.
 
 ## Privacidad
 La app es pública por enlace: **nunca** muestra nombre, documento, correo ni teléfono; solo ID SIS + iniciales.

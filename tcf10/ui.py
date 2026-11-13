@@ -91,7 +91,8 @@ def datos() -> pd.DataFrame:
     if demo:
         st.info("**Datos de demostración** (sintéticos). Configura `[tcf10]` y `[gcp_service_account]` en los "
                 "Secrets para ver los datos reales.", icon=":material/science:")
-    st.caption(f"Corte: {hoy:%d/%m/%Y}")
+    sis = pd.to_datetime(df.get("actualizado_sis"), errors="coerce").max() if "actualizado_sis" in df else pd.NaT
+    st.caption(f"Corte: {hoy:%d/%m/%Y}" + ("" if pd.isna(sis) else f" · SIS actualizado: {sis:%d/%m/%Y %H:%M}"))
     return df
 
 
