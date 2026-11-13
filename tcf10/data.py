@@ -179,7 +179,20 @@ def _bq(archivo: str, ids: tuple[int, ...] | None = None, **escalares: float) ->
     sql = (RAIZ / "queries" / f"{archivo}.sql").read_text(encoding="utf-8").replace("{dataset}", cfg["sis_dataset"])
     params = [] if ids is None else [bigquery.ArrayQueryParameter("ids_sis", "INT64", list(ids))]
     params += [bigquery.ScalarQueryParameter(k, "FLOAT64", float(v)) for k, v in escalares.items()]
-    return cliente.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).to_dataframe()
+    try:
+        return cliente.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).to_dataframe()
+    except Exception as e:  # noqa: BLE001 -- Streamlit Cloud oculta el mensaje original: se muestra en pantalla
+        codigo = getattr(e, "code", None)
+        pista = {
+            403: f"La cuenta de servicio no tiene permiso. Necesita «BigQuery Job User» en el proyecto "
+                 f"«{cliente.project}» y «BigQuery Data Viewer» sobre DVTD_SIS, DSTD_SIS y DSGE_SIS.",
+            404: f"No se encontró la vista o el dataset. Revisa `sis_dataset` en los Secrets "
+                 f"(hoy: «{cfg['sis_dataset']}») y la ubicación (región) del dataset.",
+            400: "La consulta tiene un error (columna o tipo de dato distinto al esperado en la vista).",
+        }.get(codigo, "Error al consultar BigQuery.")
+        detalle = getattr(e, "message", None) or str(e)
+        raise ErrorConfiguracion(f"{pista}\n\nConsulta: `queries/{archivo}.sql` · Código: {codigo}\n\n"
+                                 f"Detalle de BigQuery: {detalle[:600]}") from e
 
 
 @st.cache_data(ttl=3600, show_spinner="Consultando el avance en el SIS (BigQuery)…")
