@@ -72,6 +72,13 @@ def _si(serie: pd.Series) -> pd.Series:
 
 
 def limpiar_beneficiarios(crudo: pd.DataFrame) -> pd.DataFrame:
+    planos = {_plano(c) for c in crudo.columns}
+    faltan = [c for c in OBLIGATORIAS if not any(_plano(a) in planos for a in COLUMNAS_BENEF[c])]
+    if faltan:
+        raise ErrorConfiguracion(
+            "A la pestaña de beneficiarios le faltan columnas obligatorias: "
+            + ", ".join(f"«{COLUMNAS_BENEF[c][0]}»" for c in faltan)
+            + f". Columnas encontradas: {', '.join(map(str, crudo.columns)) or '(ninguna)'}.")
     df = _normalizar(crudo, COLUMNAS_BENEF)
     df["id_sis"] = pd.to_numeric(df["id_sis"], errors="coerce").astype("Int64")
     df = df.dropna(subset=["id_sis"]).drop_duplicates("id_sis")
@@ -110,6 +117,10 @@ def limpiar_avance(crudo: pd.DataFrame) -> pd.DataFrame:
 
 
 # ------------------------------------------------------------------ fuentes
+class ErrorConfiguracion(Exception):
+    """Error de datos o de Secrets que la app muestra en pantalla en lugar de un traceback."""
+
+
 def _cfg() -> dict:
     try:
         return dict(st.secrets.get("tcf10", {}))
@@ -145,7 +156,17 @@ def _credenciales(scopes: list[str]):
 def _leer_sheet(pestana: str) -> pd.DataFrame:
     import gspread
     gc = gspread.authorize(_credenciales(["https://www.googleapis.com/auth/spreadsheets.readonly"]))
-    valores = gc.open_by_key(_cfg()["sheet_id"]).worksheet(pestana).get_all_values()
+    libro = gc.open_by_key(_cfg()["sheet_id"])
+    disponibles = [w.title for w in libro.worksheets()]
+    # tolera mayúsculas, tildes y espacios en el nombre de la pestaña
+    hoja = next((t for t in disponibles if _plano(t) == _plano(pestana)), None)
+    if hoja is None:
+        raise ErrorConfiguracion(
+            f"El Google Sheet no tiene la pestaña «{pestana}». Pestañas encontradas: "
+            f"{', '.join(disponibles) or '(ninguna)'}. Renombra la pestaña o define "
+            f"`pestana_beneficiarios` / `pestana_cohortes` en `[tcf10]` de los Secrets. "
+            f"Si el Sheet aún no está listo, quita `sheet_id` y la app usa la base del SIS.")
+    valores = libro.worksheet(hoja).get_all_values()
     return pd.DataFrame(valores[1:], columns=valores[0]) if valores else pd.DataFrame()
 
 
