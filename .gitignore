@@ -1,0 +1,10 @@
+.streamlit/secrets.toml
+*.json
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+# datos personales reales: nunca al repo
+data/*
+!data/demo/
