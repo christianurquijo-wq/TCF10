@@ -136,11 +136,46 @@ def _hay_sa() -> bool:
 
 
 def modo() -> str:
-    """'demo' sin credenciales · 'sis' con BigQuery pero sin Sheet · 'completo' con Sheet + BigQuery."""
+    """'demo' sin credenciales · 'sis' con datos del SIS pero sin Sheet operativo · 'completo' con ambos."""
     cfg = _cfg()
-    if not (cfg.get("sis_dataset") and _hay_sa()):
+    if not (_hay_sa() and (cfg.get("sis_sheet_id") or cfg.get("sis_dataset"))):
         return "demo"
     return "completo" if cfg.get("sheet_id") else "sis"
+
+
+def fuente_sis() -> str:
+    """'sheet' si el SIS llega como copia en Google Sheets (sis_sheet_id); 'bq' si se consulta BigQuery."""
+    return "sheet" if _cfg().get("sis_sheet_id") else "bq"
+
+
+@st.cache_data(ttl=900, show_spinner="Leyendo los datos del SIS (Google Sheets)…")
+def _sis_sheet() -> dict[str, pd.DataFrame]:
+    """Lee las pestañas VTD10 y devuelve tablas livianas sin datos personales (solo ID SIS e iniciales)."""
+    import gspread
+    from gspread.utils import DateTimeOption, ValueRenderOption
+    from tcf10 import sis_sheet
+    gc = gspread.authorize(_credenciales(["https://www.googleapis.com/auth/spreadsheets.readonly"]))
+    try:
+        libro = gc.open_by_key(_cfg()["sis_sheet_id"])
+    except gspread.exceptions.APIError as e:
+        raise ErrorConfiguracion(
+            f"No se pudo abrir el Sheet del SIS ({e.response.status_code}). Compártelo como Lector con "
+            f"{st.secrets['gcp_service_account'].get('client_email', 'la cuenta de servicio')}.") from e
+    por_plano = {_plano(w.title): w for w in libro.worksheets()}
+    crudas = {}
+    for clave, titulo in sis_sheet.PESTANAS.items():
+        ws = por_plano.get(_plano(titulo))
+        if ws is None:
+            continue
+        v = ws.get_all_values(value_render_option=ValueRenderOption.unformatted,
+                              date_time_render_option=DateTimeOption.formatted_string)
+        if v:
+            ancho = len(v[0])
+            crudas[clave] = pd.DataFrame([(f + [""] * ancho)[:ancho] for f in v[1:]], columns=v[0])
+    try:
+        return sis_sheet.preparar(crudas)
+    except sis_sheet.FaltaEstructura as e:
+        raise ErrorConfiguracion(f"{e} Pestañas encontradas: {', '.join(w.title for w in libro.worksheets())}.") from e
 
 
 def modo_demo() -> bool:
@@ -243,13 +278,20 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
         cohortes = limpiar_cohortes(pd.read_csv(DEMO / "cohortes.csv", dtype=str))
         return benef, avance, cohortes, True
     cfg = _cfg()
+    desde_sheet = fuente_sis() == "sheet"
+    if desde_sheet:
+        from tcf10 import sis_sheet
     if m == "sis":
-        benef, cohortes = base_desde_sis(_base_sis())
+        benef, cohortes = base_desde_sis(sis_sheet.base(_sis_sheet()) if desde_sheet else _base_sis())
     else:
         benef = limpiar_beneficiarios(_leer_sheet(cfg.get("pestana_beneficiarios", "BENEFICIARIOS")))
         cohortes = limpiar_cohortes(_leer_sheet(cfg.get("pestana_cohortes", "COHORTES")))
     ids = tuple(int(x) for x in benef["id_sis"].dropna().unique())
-    avance = limpiar_avance(_avance_bigquery(ids)) if ids else pd.DataFrame(
+    if desde_sheet:
+        avance = limpiar_avance(sis_sheet.avance(_sis_sheet(), ids, float(cfg.get("horas_por_sesion", 3.0)),
+                                                 float(cfg.get("divisor_time_view", 3600))))
+    else:
+        avance = limpiar_avance(_avance_bigquery(ids)) if ids else pd.DataFrame(
         columns=["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis", "actualizado_sis"])
     benef = _completar_grupo(benef, avance)
     return benef, avance, cohortes, False
@@ -265,7 +307,11 @@ def agregados(ids: tuple[int, ...]) -> tuple[pd.DataFrame, pd.DataFrame]:
     """(asistencia por grupo × sesión, progreso por grupo × curso). En demo se generan sintéticos."""
     if modo_demo():
         return _agregados_demo(ids)
-    asis, prog = _agregados_bigquery(ids)
+    if fuente_sis() == "sheet":
+        from tcf10 import sis_sheet
+        asis, prog = sis_sheet.agregados(_sis_sheet(), ids)
+    else:
+        asis, prog = _agregados_bigquery(ids)
     asis["fecha"] = pd.to_datetime(asis["fecha"], errors="coerce")
     return asis, prog
 
@@ -307,5 +353,5 @@ def _completar_grupo(benef: pd.DataFrame, avance: pd.DataFrame) -> pd.DataFrame:
 
 
 def refrescar() -> None:
-    for f in (_leer_sheet, _avance_bigquery, _base_sis, _agregados_bigquery):
+    for f in (_leer_sheet, _avance_bigquery, _base_sis, _agregados_bigquery, _sis_sheet):
         f.clear()

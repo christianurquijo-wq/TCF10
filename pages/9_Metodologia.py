@@ -13,7 +13,7 @@ sesiones con docente) y {ui.num(C.HORAS_ASINCRONICAS, 1)} h asincrónicas (plata
 su tope: horas de más en uno no compensan el otro. **Culmina** quien llega al {ui.pct(C.UMBRAL_CULMINACION)}:
 **{ui.num(C.HORAS_CULMINACION)} h válidas**.
 
-**Fuente del avance.** Vistas VTD10 del SIS en BigQuery, cruzadas por ID SIS: sincrónicas = sesiones pasadas con
+**Fuente del avance.** Vistas VTD10 del SIS (BigQuery o su copia en Google Sheets), cruzadas por ID SIS: sincrónicas = sesiones pasadas con
 asistencia × horas por sesión configuradas; asincrónicas = tiempo visto en la plataforma (time_view) sumado por curso,
 para no contar dos veces lecciones y recursos. Se excluyen los usuarios de prueba. La base de beneficiarios, grupos, docentes, retiros,
 certificación y situación laboral sale del Google Sheet operativo.

@@ -28,8 +28,11 @@ def main() -> None:
     lineas = [
         "[tcf10]",
         '# sheet_id = ""                               # cuando exista el Google Sheet operativo',
-        'sis_dataset = "potent-poetry-284019.DVTD_SIS"',
-        'bq_project = "potent-poetry-284019"         # la cuenta necesita BigQuery Job User aquí',
+        '# Datos del SIS: copia de las vistas VTD10 en Google Sheets (sin BigQuery)',
+        'sis_sheet_id = "1j9qc0Pcy8xvWnjfgwEwQFrARBXTN6O3AQT2ZwTntQU8"',
+        '# Alternativa con BigQuery (requiere permisos sobre DVTD_SIS, DSTD_SIS y DSGE_SIS):',
+        '# sis_dataset = "potent-poetry-284019.DVTD_SIS"',
+        f'# bq_project = {toml_str(sa.get("project_id", ""))}',
         "horas_por_sesion = 3.0",
         "divisor_time_view = 3600",
         "",

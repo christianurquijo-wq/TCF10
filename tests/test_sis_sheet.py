@@ -1,0 +1,80 @@
+"""Fuente SIS desde Google Sheets: misma lógica que las consultas de BigQuery, sobre pestañas sintéticas."""
+import pandas as pd
+import pytest
+
+from tcf10 import sis_sheet as S
+
+
+def _crudas():
+    alumnos = [(101, "Ana María Pérez", "G1"), (102, "Luis Gómez", "G1"), (103, "Sara Ruiz", "G2")]
+    asis_det, asis_res, basica, prog_cur, prog_det, login = [], [], [], [], [], []
+    for inc, nom, g in alumnos:
+        basica.append({"user_incremental": inc, "user_full_name": nom, "program_name": "Auxiliar",
+                       "level_name": "Básico", "contact_incremental": ""})
+        for k in range(1, 5):
+            pasada = k <= 3
+            att = 1 if (pasada and inc != 103 and k != 3) else 0
+            nreg = 1 if (pasada and k == 3) else 0
+            asis_det.append({"user_id": "x", "incremental": inc, "student_name": nom, "student_doc": 1,
+                             "group_name": g, "session_id": f"{g}-{k}", "session_number": k,
+                             "session_date": f"2026-10-0{k}", "attended": att,
+                             "not_attended": int(pasada and not att and not nreg), "not_registered": nreg,
+                             "is_past_session": pasada, "last_updated_class_session": "2026-11-13 06:00:00"})
+        asis_res.append({"incremental": inc, "program_name": "Auxiliar", "group_name": g, "total_sessions": 4,
+                         "attended_sessions": 2 if inc != 103 else 0,
+                         "last_attendance_date": "2026-10-02 10:00:00" if inc != 103 else "",
+                         "last_updated_class_session": "2026-11-13 06:00:00", "student_name": nom})
+        prog_cur.append({"incremental": inc, "group_name": g, "group_start_date": "2026-10-01",
+                         "group_end_date": "2026-12-15", "course_name": "Módulo 1",
+                         "course_completed_status": 50, "lessons_active": 10, "lessons_completed": 5,
+                         "course_time_view": 7200 if inc == 101 else "", "progress_status": "en_progreso",
+                         "email": "no@usar"})
+        prog_det.append({"incremental": inc, "completed_date": "2026-11-10T09:00:00",
+                         "last_updated_statistics": "2026-11-13 05:00:00"})
+        login.append({"incremental": inc, "log_date": "2026-11-12"})
+    return {"asis_det": pd.DataFrame(asis_det), "asis_res": pd.DataFrame(asis_res),
+            "basica": pd.DataFrame(basica), "prog_cur": pd.DataFrame(prog_cur),
+            "prog_det": pd.DataFrame(prog_det), "login": pd.DataFrame(login)}
+
+
+def test_descarta_datos_personales():
+    t = S.preparar(_crudas())
+    for df in t.values():
+        assert not {"student_name", "user_full_name", "email", "student_doc"} & set(df.columns)
+    assert t["basica"].set_index("id_sis").loc[101, "iniciales"] == "A.M.P."
+
+
+def test_avance_horas_y_ultima_actividad():
+    t = S.preparar(_crudas())
+    av = S.avance(t, [101, 102, 103], horas_sesion=3.0, divisor_tiempo=3600).set_index("id_sis")
+    assert av.loc[101, "horas_sinc"] == 6.0
+    assert av.loc[101, "horas_asinc"] == pytest.approx(2.0)
+    assert av.loc[102, "horas_asinc"] == 0
+    assert av.loc[103, "ultima_actividad"] == pd.Timestamp("2026-11-12")  # el ingreso es lo más reciente
+    assert av.loc[101, "grupo_sis"] == "G1"
+    assert av.loc[101, "actualizado_sis"] == pd.Timestamp("2026-11-13 05:00:00")
+
+
+def test_base_y_agregados():
+    t = S.preparar(_crudas())
+    b = S.base(t).set_index("id_sis")
+    assert len(b) == 3 and b.loc[103, "grupo"] == "G2"
+    assert b.loc[101, "fecha_inicio"] == pd.Timestamp("2026-10-01")
+    asis, prog = S.agregados(t, [101, 102, 103])
+    g1 = asis[asis["grupo"] == "G1"]
+    assert g1["session_id"].nunique() == 3          # solo sesiones pasadas
+    assert g1["asistieron"].sum() == 4 and g1["sin_registro"].sum() == 2
+    assert prog["en_progreso"].sum() == 3
+
+
+def test_fechas_serial_y_dia_mes():
+    s = S._fecha(pd.Series([46339, "13/11/2026", "2026-11-13 08:00:00", ""]))
+    assert s.iloc[0] == pd.Timestamp("2026-11-13")
+    assert s.iloc[1] == pd.Timestamp("2026-11-13")
+    assert pd.isna(s.iloc[3])
+
+
+def test_pestana_faltante():
+    c = _crudas(); c.pop("asis_res")
+    with pytest.raises(S.FaltaEstructura):
+        S.preparar(c)
