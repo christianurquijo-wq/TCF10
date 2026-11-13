@@ -88,7 +88,11 @@ def _preparado(hoy: pd.Timestamp) -> tuple[pd.DataFrame, bool]:
 def datos() -> pd.DataFrame:
     """Datos listos para las páginas + banner si es demostración."""
     hoy = HOY_DEMO if data.modo_demo() else pd.Timestamp(datetime.now(TZ).date())
-    df, demo = _preparado(hoy)
+    try:
+        df, demo = _preparado(hoy)
+    except data.ErrorConfiguracion as e:
+        st.error(str(e), icon=":material/error:")
+        st.stop()
     if demo:
         st.info("**Datos de demostración** (sintéticos). Configura `[tcf10]` y `[gcp_service_account]` en los "
                 "Secrets para ver los datos reales.", icon=":material/science:")
