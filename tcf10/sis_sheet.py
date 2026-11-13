@@ -48,14 +48,37 @@ def _num(s: pd.Series) -> pd.Series:
     return pd.to_numeric(s, errors="coerce")
 
 
+_DMY = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}")
+
+
+def _una_fecha(v) -> pd.Timestamp:
+    if v is None or (isinstance(v, float) and pd.isna(v)) or (isinstance(v, str) and not v.strip()):
+        return pd.NaT
+    try:
+        if isinstance(v, (int, float)):
+            return (pd.Timestamp("1899-12-30") + pd.to_timedelta(float(v), unit="D")
+                    if 20000 <= v <= 80000 else pd.NaT)
+        txt = str(v).strip()
+        ts = pd.to_datetime(txt, dayfirst=True) if _DMY.match(txt) else pd.Timestamp(txt)
+    except (ValueError, TypeError, OverflowError):
+        return pd.NaT
+    if ts.tzinfo is not None:  # TIMESTAMP de BigQuery (UTC) → hora de Bogotá, sin zona
+        ts = ts.tz_convert("America/Bogota").tz_localize(None)
+    return ts
+
+
 def _fecha(s: pd.Series) -> pd.Series:
-    """Acepta serial de Sheets (número), ISO (2026-11-13 08:00:00) o día/mes/año."""
-    num = pd.to_numeric(s, errors="coerce")
-    serial = pd.to_datetime(num.where(num.between(20000, 80000)), unit="D", origin="1899-12-30", errors="coerce")
-    texto = s.astype("string").str.strip().replace("", pd.NA)
-    iso = pd.to_datetime(texto, format="ISO8601", errors="coerce")
-    dmy = pd.to_datetime(texto, dayfirst=True, format="mixed", errors="coerce")
-    return serial.fillna(iso).fillna(dmy).astype("datetime64[ns]")
+    """Acepta serial de Sheets, ISO con o sin zona horaria (2026-11-13 08:00:00 UTC) o día/mes/año.
+    Los DATETIME del SIS ya vienen en hora de Bogotá; los TIMESTAMP (UTC) se convierten a Bogotá."""
+    valores = s.tolist()
+    cache = {}
+    for v in valores:  # las fechas se repiten mucho: se convierte cada valor distinto una sola vez
+        k = (type(v), v) if not (isinstance(v, float) and pd.isna(v)) else ("nan",)
+        if k not in cache:
+            cache[k] = _una_fecha(v)
+    convertidas = [cache[(type(v), v) if not (isinstance(v, float) and pd.isna(v)) else ("nan",)] for v in valores]
+    return pd.to_datetime(pd.Series(convertidas, index=s.index, dtype=object),
+                          errors="coerce").astype("datetime64[ns]")
 
 
 def _bool(s: pd.Series) -> pd.Series:

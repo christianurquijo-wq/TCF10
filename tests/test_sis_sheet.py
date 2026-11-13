@@ -74,6 +74,17 @@ def test_fechas_serial_y_dia_mes():
     assert pd.isna(s.iloc[3])
 
 
+def test_fechas_con_zona_horaria_mezcladas():
+    s = S._fecha(pd.Series(["2026-11-10 14:00:00 UTC", "2026-11-10T14:00:00+00:00", "2026-11-10 09:00:00",
+                            "05/11/2026", None, "basura"]))
+    assert s.dtype == "datetime64[ns]"
+    assert s.iloc[0] == pd.Timestamp("2026-11-10 09:00:00")   # UTC → Bogotá
+    assert s.iloc[1] == pd.Timestamp("2026-11-10 09:00:00")
+    assert s.iloc[2] == pd.Timestamp("2026-11-10 09:00:00")   # sin zona: se respeta
+    assert s.iloc[3] == pd.Timestamp("2026-11-05")            # día/mes/año
+    assert pd.isna(s.iloc[4]) and pd.isna(s.iloc[5])
+
+
 def test_pestana_faltante():
     c = _crudas(); c.pop("asis_res")
     with pytest.raises(S.FaltaEstructura):
