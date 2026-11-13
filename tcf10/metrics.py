@@ -117,7 +117,9 @@ def pagos(df: pd.DataFrame) -> list[dict]:
     salida = []
     entregados = len(df)
     enrolados = int(df["enrolado"].sum())
-    denominador = min(C.CUPOS_CONTRATADOS, entregados) or C.CUPOS_CONTRATADOS
+    solo_sis = "fuente" in df and bool(df["fuente"].eq("sis").all())
+    # sin la base de Atenea (modo solo SIS) no se sabe cuántos se entregaron: se compara contra los cupos
+    denominador = C.CUPOS_CONTRATADOS if solo_sis else (min(C.CUPOS_CONTRATADOS, entregados) or C.CUPOS_CONTRATADOS)
     todas_iniciadas = bool(len(df)) and bool(df["cohorte_iniciada"].all())
     todas_cerradas = bool(len(df)) and bool(df["cohorte_cerrada"].all())
     salida.append(_indice("enrolamiento", enrolados, denominador, medible=entregados > 0, final=todas_iniciadas,
@@ -214,7 +216,7 @@ def grupos(df: pd.DataFrame) -> pd.DataFrame:
 
 def docentes(df: pd.DataFrame) -> pd.DataFrame:
     """Carga por docente en cada cohorte en curso (los grupos simultáneos son los de la misma cohorte)."""
-    base = df[df["enrolado"] & ~df["retirado"]]
+    base = df[df["enrolado"] & ~df["retirado"] & df["docente"].ne("Sin dato")]
     d = base.groupby(["docente", "cohorte"]).agg(
         grupos=("grupo", "nunique"), gestores=("gestor", "nunique"), franjas=("franja", "nunique"),
         activos=("estado", lambda s: int(s.isin(C.ESTADOS_ACTIVOS).sum()))).reset_index()
@@ -232,7 +234,7 @@ def alertas_equipo(df: pd.DataFrame) -> list[str]:
                     f"{C.MAX_ACTIVOS_POR_GRUPO} por docente sin aprobación de Atenea.")
     for _, r in d[d["alerta"] != ""].iterrows():
         msgs.append(f"{r['docente']} · {r['cohorte']}: {r['alerta'].lower()}.")
-    base = df[df["enrolado"] & ~df["retirado"]]
+    base = df[df["enrolado"] & ~df["retirado"] & df["franja"].ne("Sin dato")]
     for coh, s in base.groupby("cohorte")["franja"]:
         if s.nunique() < C.MIN_FRANJAS:
             msgs.append(f"{coh}: {s.nunique()} franja(s) horaria(s); el contrato pide mínimo {C.MIN_FRANJAS}.")

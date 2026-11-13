@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import html
+import re
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -74,7 +75,7 @@ def barra(avance: float | None, meta: float | None, color: str) -> str:
 
 def iniciales(nombre: str) -> str:
     """La app es pública: nunca se muestra el nombre completo ni el documento."""
-    partes = [p for p in str(nombre or "").split() if p.isalpha()]
+    partes = re.findall(r"[^\W\d_]+", str(nombre or ""))  # sirve con nombre completo o con «J.P.» del SIS
     return "".join(p[0].upper() + "." for p in partes[:4]) or "–"
 
 
@@ -91,6 +92,11 @@ def datos() -> pd.DataFrame:
     if demo:
         st.info("**Datos de demostración** (sintéticos). Configura `[tcf10]` y `[gcp_service_account]` en los "
                 "Secrets para ver los datos reales.", icon=":material/science:")
+    elif data.modo() == "sis":
+        st.warning("**Datos reales del SIS, sin la base de Atenea.** La cohorte es la fecha de inicio del grupo y el "
+                   "enrolamiento se compara contra los 2.599 cupos. Docente, gestor, franja, población, certificación "
+                   "y PILA aparecen cuando se configure el Google Sheet (`[tcf10] sheet_id`).",
+                   icon=":material/database:")
     sis = pd.to_datetime(df.get("actualizado_sis"), errors="coerce").max() if "actualizado_sis" in df else pd.NaT
     st.caption(f"Corte: {hoy:%d/%m/%Y}" + ("" if pd.isna(sis) else f" · SIS actualizado: {sis:%d/%m/%Y %H:%M}"))
     return df
