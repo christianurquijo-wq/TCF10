@@ -29,8 +29,8 @@ COLUMNAS = {
                  "not_attended_sessions", "total_sessions_to_date",
                  "last_attendance_date", "last_updated_class_session"],
     "basica": ["user_incremental", "user_full_name", "program_name", "level_name"],
-    "login": ["incremental", "log_date"],
-    "prog_det": ["incremental", "completed_date", "last_updated_statistics"],
+    "login": ["incremental", "log_date", "time_view"],
+    "prog_det": ["incremental", "completed_date", "last_updated_statistics", "lesson_name", "course_name"],
     "prog_cur": ["incremental", "group_name", "group_start_date", "group_end_date", "course_name",
                  "course_completed_status", "lessons_active", "lessons_completed", "course_time_view",
                  "progress_status"],
@@ -142,6 +142,7 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         t["asis_res"][c] = _num(t["asis_res"][c]).fillna(0)
 
     t["login"]["log_date"] = _fecha(t["login"]["log_date"])
+    t["login"]["time_view"] = _num(t["login"]["time_view"]).fillna(0)
     for c in ("completed_date", "last_updated_statistics"):
         t["prog_det"][c] = _fecha(t["prog_det"][c])
     for c in ("group_start_date", "group_end_date"):

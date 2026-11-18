@@ -18,15 +18,17 @@ st.set_page_config(page_title="Talento Capital F10 · Atenea", page_icon="assets
 st.logo("assets/atenea_horizontal.png", icon_image="assets/atenea_icono.png", size="large")
 estilo.css()
 
-correo = ui.acceso_restringido("atenea", ("agenciaatenea.gov.co", "kuepa.com"))
-
 paginas = [
-    st.Page("vista_atenea/1_Resumen.py", title="Resumen", icon=":material/dashboard:", default=True),
-    st.Page("vista_atenea/2_Asistencia.py", title="Asistencia", icon=":material/event_available:"),
-    st.Page("vista_atenea/3_Progreso.py", title="Progreso", icon=":material/trending_up:"),
-    st.Page("vista_atenea/4_Participantes.py", title="Participantes", icon=":material/badge:"),
+    st.Page("vista_atenea/1_Resumen.py", title="Resumen", icon=":material/dashboard:", default=True, url_path="resumen"),
+    st.Page("vista_atenea/2_Asistencia.py", title="Asistencia", icon=":material/event_available:", url_path="asistencia"),
+    st.Page("vista_atenea/3_Progreso.py", title="Progreso", icon=":material/trending_up:", url_path="progreso"),
+    st.Page("vista_atenea/4_Participantes.py", title="Participantes", icon=":material/badge:", url_path="participantes"),
+    st.Page("vista_atenea/5_Ficha.py", title="Ficha", icon=":material/person_search:", url_path="ficha"),
 ]
 nav = st.navigation(paginas, position="top")
+
+correo = ui.acceso_restringido("atenea", ("agenciaatenea.gov.co", "kuepa.com"))
+
 
 # Banda institucional con los filtros globales (aplican a todas las páginas)
 with st.container(key="banda"):

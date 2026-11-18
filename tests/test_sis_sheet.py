@@ -31,8 +31,9 @@ def _crudas():
                          "course_time_view": 7200 if inc == 101 else "", "progress_status": "en_progreso",
                          "email": "no@usar"})
         prog_det.append({"incremental": inc, "completed_date": "2026-11-10T09:00:00",
-                         "last_updated_statistics": "2026-11-13 05:00:00"})
-        login.append({"incremental": inc, "log_date": "2026-11-12"})
+                         "last_updated_statistics": "2026-11-13 05:00:00", "lesson_name": "Lección 1",
+                         "course_name": "Módulo 1"})
+        login.append({"incremental": inc, "log_date": "2026-11-12", "time_view": 1800})
     return {"asis_det": pd.DataFrame(asis_det), "asis_res": pd.DataFrame(asis_res),
             "basica": pd.DataFrame(basica), "prog_cur": pd.DataFrame(prog_cur),
             "prog_det": pd.DataFrame(prog_det), "login": pd.DataFrame(login)}

@@ -38,20 +38,52 @@ h1, h2, h3 {font-family:'Barlow Semi Condensed', sans-serif; color:#141439;}
 .pagina-titulo {font-family:'Barlow Semi Condensed', sans-serif; font-size:1.7rem; font-weight:700; color:#141439;
                 margin:14px 0 0 0;}
 .pagina-bajada {color:#4A4F78; margin-bottom:10px;}
-.kpi {border-radius:16px; padding:16px 18px 14px 18px; height:100%;}
-.kpi .k-et {font-size:.78rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase;}
-.kpi .k-val {font-family:'Barlow Semi Condensed', sans-serif; font-size:2.5rem; font-weight:700; line-height:1.05;
-             margin-top:6px;}
-.kpi .k-nota {font-size:.85rem; margin-top:4px;}
-.meta {background:#EEF6F9; border-radius:16px; padding:16px 18px; height:100%;}
+/* Tarjetas de tamaño fijo: mismo alto siempre, textos largos se recortan a 2 líneas */
+.kpi {border-radius:16px; padding:16px 18px 14px 18px; height:152px; display:flex; flex-direction:column;
+      overflow:hidden; box-sizing:border-box;}
+.kpi .k-et {font-size:.78rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; white-space:nowrap;
+            overflow:hidden; text-overflow:ellipsis;}
+.kpi .k-val {font-family:'Barlow Semi Condensed', sans-serif; font-size:clamp(1.7rem, 2.3vw, 2.5rem); font-weight:700;
+             line-height:1.1; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.kpi .k-nota, .meta .m-nota {font-size:.85rem; margin-top:4px; display:-webkit-box; -webkit-line-clamp:2;
+             -webkit-box-orient:vertical; overflow:hidden;}
+.meta {background:#EEF6F9; border-radius:16px; padding:16px 18px; height:212px; display:flex; flex-direction:column;
+       overflow:hidden; box-sizing:border-box;}
+.meta .m-pie {margin-top:auto;}
 .meta .m-et {font-size:.8rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#05247D;}
 .meta .m-val {font-family:'Barlow Semi Condensed', sans-serif; font-size:2rem; font-weight:700; color:#141439;}
-.meta .m-nota {font-size:.85rem; color:#4A4F78;}
+.meta .m-nota {color:#4A4F78;}
 .meta .m-barra {height:10px; border-radius:6px; background:#FFFFFF; margin-top:10px; position:relative;}
 .meta .m-barra span {display:block; height:10px; border-radius:6px; background:#2051A0;}
 .meta .m-barra i {position:absolute; top:-3px; width:3px; height:16px; background:#E55B0E; border-radius:2px;}
 .estado {display:inline-block; margin-top:8px; padding:2px 10px; border-radius:12px; font-size:.75rem;
          font-weight:700; background:#141439; color:#fff;}
+.ficha-cab {background:#EEF6F9; border-radius:16px; padding:18px 22px; margin:6px 0 12px 0;}
+.ficha-nombre {font-family:'Barlow Semi Condensed', sans-serif; font-size:1.9rem; font-weight:700; color:#141439;
+               line-height:1.1;}
+.ficha-datos {color:#4A4F78; margin-top:4px;}
+.chip {display:inline-block; padding:3px 12px; border-radius:14px; font-size:.8rem; font-weight:700; color:#fff;
+       margin:8px 6px 0 0;}
+/* Responsive: filas de tarjetas y filtros se reacomodan (escritorio 4-5, tablet 2, celular 1 por fila) */
+[class*="st-key-fila"] [data-testid="stHorizontalBlock"], .st-key-banda [data-testid="stHorizontalBlock"] {
+    flex-wrap: wrap; row-gap: 1rem;}
+[class*="st-key-fila"] [data-testid="stColumn"] {flex: 1 1 180px; min-width: 180px;}
+.st-key-banda [data-testid="stColumn"] {flex: 1 1 200px; min-width: 200px;}
+@media (max-width: 1100px) {
+  .st-key-banda [data-testid="stColumn"] {flex: 1 1 calc(50% - 1rem); min-width: calc(50% - 1rem);}
+}
+@media (max-width: 900px) {
+  .block-container {padding-left: 1rem; padding-right: 1rem;}
+  .st-key-banda {padding: 18px 16px 8px 16px;}
+  .banda-titulo {font-size: 1.7rem;}
+  .banda-bajada {display: none;}
+  .pagina-titulo {font-size: 1.4rem;}
+}
+@media (max-width: 640px) {
+  [class*="st-key-fila"] [data-testid="stColumn"], .st-key-banda [data-testid="stColumn"] {flex: 1 1 100%; min-width: 100%;}
+  .kpi {height: 128px;} .meta {height: 196px;}
+  .ficha-nombre {font-size: 1.5rem;}
+}
 </style>
 """
 
@@ -88,9 +120,14 @@ def meta(etiqueta: str, valor: str, nota: str, estado: str, avance: float | None
     marca = f"<i style='left:{objetivo * 100:.1f}%'></i>" if objetivo else ""
     st.markdown(f"<div class='meta'><div class='m-et'>{html.escape(etiqueta)}</div>"
                 f"<div class='m-val'>{valor}</div><div class='m-nota'>{nota}</div>"
-                f"<div class='m-barra'><span style='width:{ancho:.1f}%'></span>{marca}</div>"
-                f"<div class='estado'>{html.escape(estado)}</div></div>", unsafe_allow_html=True)
+                f"<div class='m-pie'><div class='m-barra'><span style='width:{ancho:.1f}%'></span>{marca}</div>"
+                f"<div class='estado'>{html.escape(estado)}</div></div></div>", unsafe_allow_html=True)
 
 
 def seccion(titulo: str) -> None:
     st.markdown(f"<h3 style='margin:18px 0 6px 0'>{html.escape(titulo)}</h3>", unsafe_allow_html=True)
+
+
+def fila(n: int, clave: str):
+    """Fila de tarjetas responsive (se reacomoda en tablet y celular). Devuelve las columnas."""
+    return st.container(key=f"fila_{clave}").columns(n)

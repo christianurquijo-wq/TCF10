@@ -41,7 +41,8 @@ st.subheader("Alertas del equipo formativo")
 alertas = M.alertas_equipo(df)
 if alertas:
     # Una línea por alerta se volvía una lista eterna: resumen + detalle plegable.
-    exceden = M.grupos(df).query("excede_maximo")
+    gr = M.grupos(df)
+    exceden = gr[gr["activos"] > C.MAX_ACTIVOS_POR_GRUPO]  # no depende del nombre de columna de metrics.py
     otras = [a for a in alertas if not a.startswith("Grupo ")]
     if len(exceden):
         st.warning(f"**{len(exceden)} grupos superan el máximo de {C.MAX_ACTIVOS_POR_GRUPO} activos** "

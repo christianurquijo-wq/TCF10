@@ -15,14 +15,14 @@ st.logo("assets/atenea_horizontal_blanco.png", icon_image="assets/atenea_icono_b
 
 paginas = {
     "Seguimiento": [
-        st.Page("pages/1_Metas_y_pagos.py", title="Metas y pagos", icon=":material/payments:", default=True),
-        st.Page("pages/2_Avance_y_riesgo.py", title="Avance y riesgo", icon=":material/monitoring:"),
-        st.Page("pages/3_Cohortes_y_equipo.py", title="Cohortes y equipo", icon=":material/groups:"),
-        st.Page("pages/4_Asistencia_y_plataforma.py", title="Asistencia y plataforma", icon=":material/event_available:"),
-        st.Page("pages/5_Consulta_participante.py", title="Consulta por participante", icon=":material/person_search:"),
+        st.Page("tablero/1_Metas_y_pagos.py", title="Metas y pagos", icon=":material/payments:", default=True),
+        st.Page("tablero/2_Avance_y_riesgo.py", title="Avance y riesgo", icon=":material/monitoring:"),
+        st.Page("tablero/3_Cohortes_y_equipo.py", title="Cohortes y equipo", icon=":material/groups:"),
+        st.Page("tablero/4_Asistencia_y_plataforma.py", title="Asistencia y plataforma", icon=":material/event_available:"),
+        st.Page("tablero/5_Consulta_participante.py", title="Consulta por participante", icon=":material/person_search:"),
     ],
     "Referencia": [
-        st.Page("pages/9_Metodologia.py", title="Cómo se calcula", icon=":material/menu_book:"),
+        st.Page("tablero/9_Metodologia.py", title="Cómo se calcula", icon=":material/menu_book:"),
     ],
 }
 
