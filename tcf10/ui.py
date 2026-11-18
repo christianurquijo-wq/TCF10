@@ -77,6 +77,16 @@ def acceso_restringido(seccion: str = "tcf10", dominios_def=("kuepa.com",)) -> s
     En modo demo no se pide (los datos son sintéticos)."""
     if data.modo_demo():
         return ""
+    # Modo pruebas: `sin_login = true` en [tcf10] (consulta interna) o en [atenea] (vista Atenea) apaga el
+    # inicio de sesión SIN tocar el código. Mientras esté activo, cualquiera con el enlace ve nombres/documentos.
+    try:
+        sec = dict(st.secrets.get(seccion, {}))
+    except Exception:  # noqa: BLE001
+        sec = {}
+    if str(sec.get("sin_login", "")).lower() in ("true", "1", "si", "sí"):
+        st.warning("**Modo pruebas:** inicio de sesión desactivado. Quita `sin_login` de los Secrets antes de "
+                   "compartir el enlace.", icon=":material/lock_open:")
+        return ""
     try:
         hay_auth = "auth" in st.secrets
     except Exception:  # noqa: BLE001
