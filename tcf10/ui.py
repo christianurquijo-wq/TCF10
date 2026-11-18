@@ -88,7 +88,11 @@ def acceso_restringido() -> str:
     if not st.user.is_logged_in:
         st.info("Inicia sesión con tu cuenta de Google autorizada para consultar participantes.",
                 icon=":material/lock:")
-        st.button("Iniciar sesión con Google", on_click=st.login, type="primary")
+        # Admite [auth] plano o con proveedor nombrado ([auth.google]); con el plano, st.login() va sin argumento.
+        auth = st.secrets["auth"]
+        proveedor = next((k for k in auth.keys() if isinstance(auth[k], dict) or hasattr(auth[k], "keys")), None)
+        st.button("Iniciar sesión con Google", on_click=st.login, args=(proveedor,) if proveedor else (),
+                  type="primary")
         st.stop()
     correo = str(st.user.get("email", "")).lower()
     cfg = data._cfg()
