@@ -73,6 +73,15 @@ def barra(avance: float | None, meta: float | None, color: str) -> str:
     return f"<div class='barra'><span style='width:{ancho:.1f}%;background:{color}'></span>{marca}</div>"
 
 
+def curso_corto(nombre: str) -> str:
+    """«Nivel Básico - Auxiliar de información y Servicio al cliente con enfoque en IA» → «Básico · Auxiliar»."""
+    import re as _re
+    t = _re.sub(r"\s*con enfoque en Inteligencia Artificial", "", str(nombre or ""), flags=_re.I)
+    t = t.replace("Auxiliar de información y Servicio al cliente", "Auxiliar y servicio al cliente")
+    t = t.replace("Marketing digital y finanzas", "Marketing y finanzas")
+    return _re.sub(r"^Nivel\s+", "", t).replace(" - ", " · ")
+
+
 def iniciales(nombre: str) -> str:
     """La app es pública: nunca se muestra el nombre completo ni el documento."""
     partes = re.findall(r"[^\W\d_]+", str(nombre or ""))  # sirve con nombre completo o con «J.P.» del SIS
@@ -97,10 +106,9 @@ def datos() -> pd.DataFrame:
         st.info("**Datos de demostración** (sintéticos). Configura `[tcf10]` y `[gcp_service_account]` en los "
                 "Secrets para ver los datos reales.", icon=":material/science:")
     elif data.modo() == "sis":
-        st.warning("**Datos reales del SIS, sin la base de Atenea.** La cohorte es la fecha de inicio del grupo y el "
-                   "enrolamiento se compara contra los 2.599 cupos. Docente, gestor, franja, población, certificación "
-                   "y PILA aparecen cuando se configure el Google Sheet (`[tcf10] sheet_id`).",
-                   icon=":material/database:")
+        st.info("**Datos del SIS.** Mientras no esté la base de Atenea, las cohortes se arman con las fechas de "
+                "inicio de los grupos y no se muestran docente, gestor, franja, población, certificación ni PILA.",
+                icon=":material/database:")
     sis = pd.to_datetime(df.get("actualizado_sis"), errors="coerce").max() if "actualizado_sis" in df else pd.NaT
     st.caption(f"Corte: {hoy:%d/%m/%Y}" + ("" if pd.isna(sis) else f" · SIS actualizado: {sis:%d/%m/%Y %H:%M}"))
     return df

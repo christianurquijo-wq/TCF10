@@ -21,7 +21,8 @@ def _crudas():
                              "not_attended": int(pasada and not att and not nreg), "not_registered": nreg,
                              "is_past_session": pasada, "last_updated_class_session": "2026-11-13 06:00:00"})
         asis_res.append({"incremental": inc, "program_name": "Auxiliar", "group_name": g, "total_sessions": 4,
-                         "attended_sessions": 2 if inc != 103 else 0,
+                         "attended_sessions": 2 if inc != 103 else 0, "not_attended_sessions": 0 if inc != 103 else 2,
+                         "total_sessions_to_date": 3,
                          "last_attendance_date": "2026-10-02 10:00:00" if inc != 103 else "",
                          "last_updated_class_session": "2026-11-13 06:00:00", "student_name": nom})
         prog_cur.append({"incremental": inc, "group_name": g, "group_start_date": "2026-10-01",

@@ -29,7 +29,7 @@ NIVELES = ["Básico", "Intermedio", "Avanzado"]
 POBLACIONES = ["Cerrada", "Abierta"]  # Cerrada = Jóvenes con Oportunidades (SDIS); Abierta = convocatoria Atenea
 
 # ------------------------------------------------------------------ equipo
-MAX_ACTIVOS_POR_GRUPO = 30          # 1 docente por cada 30 activos
+MAX_ACTIVOS_POR_GRUPO = 35          # máximo de activos por grupo (confirmado con Atenea)
 MAX_GRUPOS_POR_DOCENTE = 3          # simultáneos, sin cruce de horario
 MIN_GESTORES_POR_DOCENTE = 1
 MIN_FRANJAS = 3
@@ -77,6 +77,12 @@ RIESGO = {
 # primera semana de una cohorte, cuando el esperado es casi cero).
 RIESGO_MIN_ESPERADO_H = 9.0     # 10 % de la formación
 RIESGO_GRACIA_DIAS = 7          # días desde el inicio antes de alertar por inactividad
+# Primeras semanas: el ritmo de horas todavía no dice mucho, así que el riesgo se mide por asistencia.
+RIESGO_FASE_INICIAL_DIAS = 14   # días desde el inicio del grupo en que manda la asistencia
+RIESGO_MIN_SESIONES = 2         # sesiones registradas mínimas para juzgar la asistencia
+RIESGO_ASISTENCIA_MEDIO = 0.5   # asistió a menos de la mitad de las sesiones registradas → medio
+COHORTE_SEPARACION_DIAS = 21    # sin base de Atenea: grupos que inician con menos de 3 semanas de diferencia = misma cohorte
+REGISTRO_GRACIA_HORAS = 24      # una sesión de las últimas 24 h sin asistencia se cuenta como «por registrar»
 # Probabilidad de culminar según el nivel de riesgo, para la proyección de pagos (supuesto ajustable).
 PROB_CULMINAR = {"Bajo": 0.90, "Medio": 0.60, "Alto": 0.20}
 

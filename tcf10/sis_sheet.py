@@ -26,6 +26,7 @@ COLUMNAS = {
     "asis_det": ["incremental", "group_name", "session_id", "session_number", "session_date", "attended",
                  "not_attended", "not_registered", "is_past_session", "last_updated_class_session"],
     "asis_res": ["incremental", "program_name", "group_name", "total_sessions", "attended_sessions",
+                 "not_attended_sessions", "total_sessions_to_date",
                  "last_attendance_date", "last_updated_class_session"],
     "basica": ["user_incremental", "user_full_name", "program_name", "level_name"],
     "login": ["incremental", "log_date"],
@@ -122,7 +123,7 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
 
     for c in ("last_attendance_date", "last_updated_class_session"):
         t["asis_res"][c] = _fecha(t["asis_res"][c])
-    for c in ("total_sessions", "attended_sessions"):
+    for c in ("total_sessions", "attended_sessions", "not_attended_sessions", "total_sessions_to_date"):
         t["asis_res"][c] = _num(t["asis_res"][c]).fillna(0)
 
     t["login"]["log_date"] = _fecha(t["login"]["log_date"])
@@ -147,6 +148,8 @@ def avance(t: dict[str, pd.DataFrame], ids, horas_sesion: float, divisor_tiempo:
     ids = set(int(i) for i in ids)
     ar = t["asis_res"][t["asis_res"]["id_sis"].isin(ids)]
     asis = ar.groupby("id_sis").agg(sesiones_asistidas=("attended_sessions", "sum"),
+                                    sesiones_inasistidas=("not_attended_sessions", "sum"),
+                                    sesiones_a_la_fecha=("total_sessions_to_date", "sum"),
                                     ultima_asistencia=("last_attendance_date", "max"))
     grupo = (ar.sort_values("total_sessions", ascending=False).dropna(subset=["group_name"])
                .drop_duplicates("id_sis").set_index("id_sis")["group_name"].rename("grupo_sis"))
@@ -161,12 +164,17 @@ def avance(t: dict[str, pd.DataFrame], ids, horas_sesion: float, divisor_tiempo:
     df = df.reset_index()
     if df.empty:
         return pd.DataFrame(columns=["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis",
-                                     "actualizado_sis"])
+                                     "actualizado_sis", "sesiones_asistidas", "sesiones_registradas",
+                                     "sesiones_a_la_fecha"])
     df["horas_sinc"] = (df["sesiones_asistidas"].fillna(0) * horas_sesion).round(2)
     df["horas_asinc"] = df["horas_asinc"].fillna(0).round(2)
     df["ultima_actividad"] = df[["ultima_asistencia", "ultimo_completado", "ultimo_ingreso"]].max(axis=1)
     df["actualizado_sis"] = actualizado(t)
-    return df[["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis", "actualizado_sis"]]
+    df["sesiones_asistidas"] = df["sesiones_asistidas"].fillna(0)
+    df["sesiones_registradas"] = df["sesiones_asistidas"] + df["sesiones_inasistidas"].fillna(0)
+    df["sesiones_a_la_fecha"] = df["sesiones_a_la_fecha"].fillna(0)
+    return df[["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis", "actualizado_sis",
+               "sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha"]]
 
 
 def calendario_grupos(t: dict[str, pd.DataFrame]) -> pd.DataFrame:

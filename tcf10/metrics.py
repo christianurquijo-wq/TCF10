@@ -62,6 +62,11 @@ def preparar(benef: pd.DataFrame, avance: pd.DataFrame, cohortes: pd.DataFrame,
 
     inicio = pd.to_datetime(df["fecha_inicio"])
     fin = pd.to_datetime(df["fecha_fin"])
+    if "fi_grupo" in df:  # sin base de Atenea: cada persona con el calendario de su grupo
+        inicio = pd.to_datetime(df["fi_grupo"]).fillna(inicio)
+        fin = pd.to_datetime(df["ff_grupo"]).fillna(fin)
+    for c in ("sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha"):
+        df[c] = pd.to_numeric(df[c], errors="coerce") if c in df else np.nan
     duracion = (fin - inicio).dt.days.clip(lower=1)
     transcurrido = ((hoy - inicio).dt.days / duracion).clip(lower=0, upper=1)
     df["avance_esperado_h"] = C.HORAS_TOTALES * transcurrido
@@ -91,9 +96,18 @@ def _riesgo(f: pd.Series) -> str:
         return "Sin iniciar"
     if f["cohorte_cerrada"]:
         return "No culminó"
-    ritmo = f["ritmo"] if f["avance_esperado_h"] >= C.RIESGO_MIN_ESPERADO_H else np.nan
     inactivo = f["dias_sin_actividad"] if f["dias_desde_inicio"] >= C.RIESGO_GRACIA_DIAS else 0
     a, m = C.RIESGO["alto"], C.RIESGO["medio"]
+    # Fase inicial: manda la asistencia (el ritmo de horas aún no es representativo).
+    if pd.notna(f["dias_desde_inicio"]) and f["dias_desde_inicio"] < C.RIESGO_FASE_INICIAL_DIAS:
+        reg, asis = f.get("sesiones_registradas"), f.get("sesiones_asistidas")
+        if pd.notna(reg) and reg >= C.RIESGO_MIN_SESIONES:
+            if asis == 0 and f["horas_asinc"] <= 0:
+                return "Alto"
+            if asis / reg < C.RIESGO_ASISTENCIA_MEDIO:
+                return "Medio"
+        return "Medio" if inactivo >= m["dias_sin_actividad"] else "Bajo"
+    ritmo = f["ritmo"] if f["avance_esperado_h"] >= C.RIESGO_MIN_ESPERADO_H else np.nan
     if (pd.notna(ritmo) and ritmo < a["ritmo_menor_a"]) or inactivo >= a["dias_sin_actividad"]:
         return "Alto"
     if (pd.notna(ritmo) and ritmo < m["ritmo_menor_a"]) or inactivo >= m["dias_sin_actividad"]:
@@ -103,6 +117,17 @@ def _riesgo(f: pd.Series) -> str:
 
 def motivo_riesgo(f: pd.Series) -> str:
     partes = []
+    if (pd.notna(f.get("dias_desde_inicio")) and f["dias_desde_inicio"] < C.RIESGO_FASE_INICIAL_DIAS
+            and pd.notna(f.get("sesiones_registradas")) and f["sesiones_registradas"] >= C.RIESGO_MIN_SESIONES):
+        asis, reg = int(f["sesiones_asistidas"] or 0), int(f["sesiones_registradas"])
+        if asis == 0:
+            partes.append(f"no asistió a ninguna de {reg} sesiones" + ("" if f["horas_asinc"] > 0 else
+                                                                         " ni avanzó en plataforma"))
+        elif asis / reg < C.RIESGO_ASISTENCIA_MEDIO:
+            partes.append(f"asistió a {asis} de {reg} sesiones")
+        if f.get("dias_sin_actividad", 0) >= C.RIESGO["medio"]["dias_sin_actividad"]:
+            partes.append(f"{int(f['dias_sin_actividad'])} días sin actividad")
+        return "; ".join(partes)
     if pd.notna(f.get("ritmo")) and f["ritmo"] < C.RIESGO["medio"]["ritmo_menor_a"]:
         partes.append(f"va al {f['ritmo']:.0%} del ritmo esperado")
     if f.get("dias_sin_actividad", 0) >= C.RIESGO["medio"]["dias_sin_actividad"]:
@@ -122,9 +147,16 @@ def pagos(df: pd.DataFrame) -> list[dict]:
     denominador = C.CUPOS_CONTRATADOS if solo_sis else (min(C.CUPOS_CONTRATADOS, entregados) or C.CUPOS_CONTRATADOS)
     todas_iniciadas = bool(len(df)) and bool(df["cohorte_iniciada"].all())
     todas_cerradas = bool(len(df)) and bool(df["cohorte_cerrada"].all())
-    salida.append(_indice("enrolamiento", enrolados, denominador, medible=entregados > 0, final=todas_iniciadas,
-                          detalle=f"{_n(enrolados)} enrolados de {_n(denominador)} "
-                                  f"({'cupos' if denominador == C.CUPOS_CONTRATADOS else 'entregados por Atenea'})"))
+    if solo_sis:
+        # El índice es enrolados ÷ personas entregadas por Atenea: sin esa base no se puede calcular.
+        # El SIS puede tener más estudiantes que cupos (reemplazos, pruebas), así que no se compara contra cupos.
+        salida.append(_indice("enrolamiento", enrolados, C.CUPOS_CONTRATADOS, medible=False,
+                              detalle=f"{_n(enrolados)} estudiantes en el SIS frente a {_n(C.CUPOS_CONTRATADOS)} "
+                                      "cupos. Se mide con la base que entrega Atenea."))
+    else:
+        salida.append(_indice("enrolamiento", enrolados, denominador, medible=entregados > 0, final=todas_iniciadas,
+                              detalle=f"{_n(enrolados)} enrolados de {_n(denominador)} "
+                                      f"({'cupos' if denominador == C.CUPOS_CONTRATADOS else 'entregados por Atenea'})"))
 
     culminados = int(df["culmino"].sum())
     proyectados = float(df.loc[df["enrolado"] & ~df["retirado"], "prob_culminar"].sum())
@@ -210,7 +242,7 @@ def grupos(df: pd.DataFrame) -> pd.DataFrame:
         activos=("estado", lambda s: int(s.isin(C.ESTADOS_ACTIVOS).sum())),
         culminados=("culmino", "sum"), horas_promedio=("horas_validas", "mean"),
         riesgo_alto=("riesgo", lambda s: int(s.eq("Alto").sum()))).reset_index()
-    g["excede_30"] = g["activos"] > C.MAX_ACTIVOS_POR_GRUPO
+    g["excede_maximo"] = g["activos"] > C.MAX_ACTIVOS_POR_GRUPO
     return g.sort_values(["cohorte", "grupo"])
 
 
@@ -229,9 +261,9 @@ def docentes(df: pd.DataFrame) -> pd.DataFrame:
 def alertas_equipo(df: pd.DataFrame) -> list[str]:
     msgs = []
     g, d = grupos(df), docentes(df)
-    for _, r in g[g["excede_30"]].iterrows():
+    for _, r in g[g["excede_maximo"]].iterrows():
         msgs.append(f"Grupo {r['grupo']} ({r['cohorte']}) tiene {r['activos']} activos: máximo "
-                    f"{C.MAX_ACTIVOS_POR_GRUPO} por docente sin aprobación de Atenea.")
+                    f"{C.MAX_ACTIVOS_POR_GRUPO} por grupo acordado con Atenea ({r['activos'] - C.MAX_ACTIVOS_POR_GRUPO} de más).")
     for _, r in d[d["alerta"] != ""].iterrows():
         msgs.append(f"{r['docente']} · {r['cohorte']}: {r['alerta'].lower()}.")
     base = df[df["enrolado"] & ~df["retirado"] & df["franja"].ne("Sin dato")]

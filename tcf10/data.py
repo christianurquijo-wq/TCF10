@@ -113,7 +113,13 @@ def limpiar_avance(crudo: pd.DataFrame) -> pd.DataFrame:
     for c in ("grupo_sis", "actualizado_sis"):
         if c not in df:
             df[c] = None
-    return df[["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis", "actualizado_sis"]]
+    if "sesiones_registradas" not in df and "sesiones_sin_registro" in df:  # consulta de BigQuery
+        df["sesiones_registradas"] = (pd.to_numeric(df["sesiones_a_la_fecha"], errors="coerce")
+                                      - pd.to_numeric(df["sesiones_sin_registro"], errors="coerce"))
+    for c in ("sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha"):
+        df[c] = pd.to_numeric(df[c], errors="coerce") if c in df else float("nan")
+    return df[["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis", "actualizado_sis",
+               "sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha"]]
 
 
 # ------------------------------------------------------------------ fuentes
@@ -244,6 +250,33 @@ def _base_sis() -> pd.DataFrame:
     return _bq("base_sis")
 
 
+def agrupar_cohortes(inicios: pd.Series) -> pd.Series:
+    """Sin la base de Atenea: los grupos que arrancan con menos de 3 semanas de diferencia forman una
+    cohorte («Cohorte 1 · 10–18 nov 2026»). Antes salía una cohorte por cada fecha distinta."""
+    from tcf10 import config as C
+    meses = "ene feb mar abr may jun jul ago sep oct nov dic".split()
+    fechas = sorted(pd.to_datetime(inicios.dropna().unique()))
+    bloques, actual = [], []
+    for f in fechas:
+        if actual and (f - actual[-1]).days > C.COHORTE_SEPARACION_DIAS:
+            bloques.append(actual); actual = []
+        actual.append(f)
+    if actual:
+        bloques.append(actual)
+    nombre = {}
+    for i, b in enumerate(bloques, start=1):
+        a, z = b[0], b[-1]
+        if a == z:
+            rango = f"{a.day} {meses[a.month - 1]} {a.year}"
+        elif a.month == z.month:
+            rango = f"{a.day}–{z.day} {meses[a.month - 1]} {a.year}"
+        else:
+            rango = f"{a.day} {meses[a.month - 1]} – {z.day} {meses[z.month - 1]} {z.year}"
+        for f in b:
+            nombre[f] = f"Cohorte {i} · {rango}"
+    return pd.to_datetime(inicios).map(nombre).fillna("Sin grupo con fecha")
+
+
 def base_desde_sis(crudo: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Sin Sheet: todos los estudiantes del SIS son la base. La cohorte = fecha de inicio del grupo.
     Docente, gestor, franja, población, certificación y PILA quedan «Sin dato» hasta que exista el Sheet."""
@@ -252,10 +285,10 @@ def base_desde_sis(crudo: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     df = df.dropna(subset=["id_sis"]).drop_duplicates("id_sis")
     for c in ("fecha_inicio", "fecha_fin"):
         df[c] = pd.to_datetime(df[c], errors="coerce")
-    df["cohorte"] = df["fecha_inicio"].dt.strftime("Inicio %d/%m/%Y").fillna("Sin fecha de inicio")
+    df["cohorte"] = agrupar_cohortes(df["fecha_inicio"])
     cohortes = (df.groupby("cohorte", as_index=False)
                   .agg(fecha_inicio=("fecha_inicio", "min"), fecha_fin=("fecha_fin", "max"))
-                  .sort_values("fecha_inicio"))
+                  .sort_values("fecha_inicio", na_position="last"))
     benef = pd.DataFrame({
         "id_sis": df["id_sis"], "documento": None, "nombre": df["iniciales"].fillna(""),
         "cohorte": df["cohorte"], "poblacion": "Sin dato",
@@ -263,6 +296,8 @@ def base_desde_sis(crudo: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         "grupo": df["grupo"].fillna("Sin dato"), "docente": "Sin dato", "gestor": "Sin dato",
         "franja": "Sin dato", "enrolado": True, "estado": "Activo", "lab_inicio": "",
         "certificado": None, "formal_t3": None, "fuente": "sis",
+        # calendario propio del grupo: el ritmo esperado se mide con las fechas del grupo, no de la cohorte
+        "fi_grupo": df["fecha_inicio"], "ff_grupo": df["fecha_fin"],
     })
     benef["certificado"] = pd.Series([None] * len(benef), index=benef.index, dtype=object)
     benef["formal_t3"] = pd.Series([None] * len(benef), index=benef.index, dtype=object)

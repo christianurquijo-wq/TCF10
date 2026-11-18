@@ -1,4 +1,5 @@
 """Seguimiento por cohorte, grupo y docente, y control de las condiciones del equipo formativo."""
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -39,8 +40,16 @@ st.caption("Deserción = retirados ÷ enrolados. La matriz de riesgos del contra
 st.subheader("Alertas del equipo formativo")
 alertas = M.alertas_equipo(df)
 if alertas:
-    for a in alertas:
+    # Una línea por alerta se volvía una lista eterna: resumen + detalle plegable.
+    exceden = M.grupos(df).query("excede_maximo")
+    otras = [a for a in alertas if not a.startswith("Grupo ")]
+    if len(exceden):
+        st.warning(f"**{len(exceden)} grupos superan el máximo de {C.MAX_ACTIVOS_POR_GRUPO} activos** "
+                   f"(el mayor tiene {int(exceden['activos'].max())}).", icon=":material/groups:")
+    for a in otras[:5]:
         st.warning(a, icon=":material/warning:")
+    with st.expander(f"Ver las {len(alertas)} alertas"):
+        st.dataframe(pd.DataFrame({"Alerta": alertas}), hide_index=True, width="stretch")
 else:
     st.success("Grupos, docentes, gestores y franjas dentro de lo que pide el contrato.", icon=":material/check_circle:")
 
@@ -49,9 +58,9 @@ st.subheader("Grupos")
 sel = ui.filtros(df, "eq", ("cohorte", "perfil", "nivel"))
 g = M.grupos(sel)
 top = g.sort_values("activos", ascending=False).head(25)
-fig = px.bar(top, x="grupo", y="activos", color="excede_30", text="activos",
+fig = px.bar(top, x="grupo", y="activos", color="excede_maximo", text="activos",
              color_discrete_map={False: ui.AZUL, True: ui.ROJO},
-             labels={"activos": "Activos", "grupo": "", "excede_30": "Más de 30"})
+             labels={"activos": "Activos", "grupo": "", "excede_maximo": f"Más de {C.MAX_ACTIVOS_POR_GRUPO}"})
 fig.add_hline(y=C.MAX_ACTIVOS_POR_GRUPO, line_dash="dash", line_color=ui.NARANJA,
               annotation_text=f"Máximo {C.MAX_ACTIVOS_POR_GRUPO}")
 fig.update_layout(showlegend=False, xaxis_tickangle=-60)
@@ -63,7 +72,7 @@ st.dataframe(
         "cohorte": "Cohorte", "grupo": "Grupo", "perfil": "Perfil", "nivel": "Nivel", "docente": "Docente",
         "gestor": "Gestor", "franja": "Franja", "integrantes": "Integrantes", "activos": "Activos",
         "culminados": "Culminaron", "horas_promedio": st.column_config.NumberColumn("Horas promedio", format="%.1f"),
-        "riesgo_alto": "Riesgo alto", "excede_30": st.column_config.CheckboxColumn("Más de 30 activos"),
+        "riesgo_alto": "Riesgo alto", "excede_maximo": st.column_config.CheckboxColumn(f"Más de {C.MAX_ACTIVOS_POR_GRUPO} activos"),
     })
 
 # ------------------------------------------------------------------ docentes

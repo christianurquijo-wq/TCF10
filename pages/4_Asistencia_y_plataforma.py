@@ -1,9 +1,12 @@
 """Asistencia a sesiones sincrónicas y avance en plataforma, directo de las vistas VTD10 del SIS."""
+from datetime import datetime
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from tcf10 import config as C
 from tcf10 import data
 from tcf10 import ui
 
@@ -18,7 +21,12 @@ if not ids:
 
 asis, prog = data.agregados(tuple(sorted(int(x) for x in df["id_sis"].dropna().unique())))
 grupos_sel = set(base["grupo"])
-asis = asis[asis["grupo"].isin(grupos_sel)]
+asis = asis[asis["grupo"].isin(grupos_sel)].copy()
+# Los docentes registran la asistencia después de la clase: lo de las últimas 24 h es «por registrar», no «sin registro».
+limite = pd.Timestamp(datetime.now(ui.TZ).replace(tzinfo=None)) - pd.Timedelta(hours=C.REGISTRO_GRACIA_HORAS)
+reciente = asis["fecha"] >= limite.normalize()
+por_registrar = int(asis.loc[reciente, "sin_registro"].sum())
+asis.loc[reciente, "sin_registro"] = 0
 prog = prog[prog["grupo"].isin(grupos_sel)]
 
 # ------------------------------------------------------------------ KPIs
@@ -32,7 +40,8 @@ with c1:
 with c2:
     cobertura = registradas / esperadas if esperadas else None
     ui.tarjeta("Asistencia registrada", ui.pct(cobertura),
-               f"{ui.num(sin_reg)} cupos de sesión sin registro del docente",
+               f"{ui.num(sin_reg)} cupos de sesión sin registro del docente"
+               + (f" · {ui.num(por_registrar)} de las últimas 24 h por registrar" if por_registrar else ""),
                ui.VERDE if (cobertura or 0) >= .95 else ui.AMARILLO if (cobertura or 0) >= .8 else ui.ROJO)
 with c3:
     ui.tarjeta("Sesiones dictadas", ui.num(asis["session_id"].nunique()),
@@ -47,10 +56,11 @@ if asis.empty and prog.empty:
     st.stop()
 
 # ------------------------------------------------------------------ tendencia de asistencia
-st.subheader("Asistencia por semana")
+diaria = asis["fecha"].dt.normalize().nunique() <= 28  # el primer mes se lee mejor por día
+st.subheader("Asistencia por día" if diaria else "Asistencia por semana")
 st.caption("Porcentaje de asistencia sobre la asistencia registrada. Una caída sostenida anticipa deserción.")
 sem = asis.dropna(subset=["fecha"]).copy()
-sem["semana"] = sem["fecha"].dt.to_period("W-SUN").dt.start_time
+sem["semana"] = sem["fecha"].dt.normalize() if diaria else sem["fecha"].dt.to_period("W-SUN").dt.start_time
 sem = sem.groupby("semana", as_index=False)[["asistieron", "no_asistieron", "sin_registro"]].sum()
 sem["asistencia"] = sem["asistieron"] / (sem["asistieron"] + sem["no_asistieron"]).where(lambda s: s > 0)
 fig = go.Figure()
@@ -94,6 +104,7 @@ with der:
 
 # ------------------------------------------------------------------ plataforma por curso
 st.subheader("Avance en plataforma por curso")
+prog = prog.assign(curso=prog["curso"].map(ui.curso_corto))
 cur = prog.groupby("curso", as_index=False)[["completado", "en_progreso", "sin_iniciar"]].sum()
 cur = cur.melt(id_vars="curso", var_name="estado", value_name="inscripciones")
 cur["estado"] = cur["estado"].map({"completado": "Completado", "en_progreso": "En progreso",

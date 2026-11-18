@@ -74,3 +74,23 @@ def test_pago_culminacion_por_persona():
 def test_activo_rezagado_es_riesgo_alto():
     df = _base(n_activos=1)
     assert df["riesgo"].iloc[0] == "Alto"  # 10 h cuando se esperaban ~60
+
+
+def test_cohortes_agrupan_grupos_de_la_misma_semana():
+    from tcf10.data import agrupar_cohortes
+    s = pd.Series(pd.to_datetime(["2026-11-10", "2026-11-11", "2026-11-17", "2026-11-18", "2027-02-01", None]))
+    c = agrupar_cohortes(s).tolist()
+    assert c[0] == c[3] == "Cohorte 1 · 10–18 nov 2026"
+    assert c[4] == "Cohorte 2 · 1 feb 2027"
+    assert c[5] == "Sin grupo con fecha"
+
+
+def test_riesgo_fase_inicial_por_asistencia():
+    base = dict(retirado=False, enrolado=True, culmino=False, cohorte_iniciada=True, cohorte_cerrada=False,
+                dias_desde_inicio=8, dias_sin_actividad=2, ritmo=0.1, avance_esperado_h=12)
+    f = pd.Series({**base, "sesiones_registradas": 3, "sesiones_asistidas": 0, "horas_asinc": 0})
+    assert M._riesgo(f) == "Alto"
+    f = pd.Series({**base, "sesiones_registradas": 4, "sesiones_asistidas": 1, "horas_asinc": 0.5})
+    assert M._riesgo(f) == "Medio"
+    f = pd.Series({**base, "sesiones_registradas": 4, "sesiones_asistidas": 3, "horas_asinc": 0})
+    assert M._riesgo(f) == "Bajo"   # ritmo bajo no cuenta en la fase inicial

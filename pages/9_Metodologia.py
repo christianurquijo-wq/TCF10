@@ -27,6 +27,8 @@ certificación y situación laboral sale del Google Sheet operativo.
 - **Bajo:** el resto. El ritmo se evalúa cuando ya se esperaban {ui.num(C.RIESGO_MIN_ESPERADO_H)} h y la inactividad
   después de {C.RIESGO_GRACIA_DIAS} días de iniciada la cohorte, para no alertar en falso la primera semana.
 
+**Primeras dos semanas de cada grupo:** el ritmo de horas todavía no es representativo, así que manda la asistencia. Con al menos 2 sesiones registradas: **alto** si no asistió a ninguna y no tiene avance en la plataforma; **medio** si asistió a menos de la mitad.
+
 Los umbrales son una propuesta inicial: se validan con Atenea y el coordinador académico.
 """)
 
