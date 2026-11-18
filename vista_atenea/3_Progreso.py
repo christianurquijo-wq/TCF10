@@ -5,9 +5,9 @@ import streamlit as st
 
 from tcf10 import config as C
 from tcf10 import ui
-from vista_atenea import comun
+from vista_atenea import comun, estilo
 
-ui.inicio("Progreso", f"Horas válidas frente a la meta de {ui.num(C.HORAS_CULMINACION)} h y avance en los cursos")
+estilo.pagina("Progreso", f"Horas válidas frente a la meta de {ui.num(C.HORAS_CULMINACION)} h y avance en los cursos")
 df = comun.filtrado(comun.todos())
 comun.nota_filtros()
 form = df[df["estado_atenea"].isin(["En formación", "Culminó"])]
@@ -17,20 +17,20 @@ if form.empty:
 
 c = st.columns(4)
 with c[0]:
-    ui.tarjeta("Horas válidas promedio", ui.num(form["horas_validas"].mean(), 1),
-               f"de {ui.num(C.HORAS_CULMINACION)} h para culminar", ui.AZUL)
+    estilo.kpi("Horas válidas promedio", ui.num(form["horas_validas"].mean(), 1),
+               f"de {ui.num(C.HORAS_CULMINACION)} h para culminar", "azul")
 with c[1]:
-    ui.tarjeta("Sincrónicas promedio", ui.num(form["horas_sinc_val"].mean(), 1),
-               f"tope {ui.num(C.HORAS_SINCRONICAS, 1)} h (clases con docente)", ui.NOCHE)
+    estilo.kpi("Sincrónicas promedio", ui.num(form["horas_sinc_val"].mean(), 1),
+               f"tope {ui.num(C.HORAS_SINCRONICAS, 1)} h (clases con docente)", "noche")
 with c[2]:
-    ui.tarjeta("Asincrónicas promedio", ui.num(form["horas_asinc_val"].mean(), 1),
-               f"tope {ui.num(C.HORAS_ASINCRONICAS, 1)} h (plataforma)", ui.NOCHE)
+    estilo.kpi("Asincrónicas promedio", ui.num(form["horas_asinc_val"].mean(), 1),
+               f"tope {ui.num(C.HORAS_ASINCRONICAS, 1)} h (plataforma)", "noche")
 with c[3]:
-    ui.tarjeta("Avance hacia la culminación", ui.pct(min(1, form["horas_validas"].mean() / C.HORAS_CULMINACION)),
-               "promedio de horas válidas ÷ 63 h", ui.NARANJA)
+    estilo.kpi("Avance hacia la culminación", ui.pct(min(1, form["horas_validas"].mean() / C.HORAS_CULMINACION)),
+               "promedio de horas válidas ÷ 63 h", "naranja")
 
 st.write("")
-st.subheader("Distribución de horas válidas")
+estilo.seccion("Distribución de horas válidas")
 fig = go.Figure(go.Histogram(x=form["horas_validas"], xbins=dict(start=0, end=90, size=3), marker_color=ui.AZUL))
 fig.add_vline(x=C.HORAS_CULMINACION, line_dash="dash", line_color=ui.NARANJA,
               annotation_text=f"Meta {ui.num(C.HORAS_CULMINACION)} h")

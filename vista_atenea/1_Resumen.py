@@ -5,9 +5,9 @@ import streamlit as st
 from tcf10 import config as C
 from tcf10 import metrics as M
 from tcf10 import ui
-from vista_atenea import comun
+from vista_atenea import comun, estilo
 
-ui.inicio("Resumen del programa", "Participantes, estado de formación y metas del contrato ATENEA-497-2026")
+estilo.pagina("Resumen del programa", "Participantes, estado de formación y metas del contrato ATENEA-497-2026")
 completo = comun.todos()
 df = comun.filtrado(completo)
 comun.nota_filtros()
@@ -19,19 +19,19 @@ desistieron = int(df["estado_atenea"].eq("Desistió").sum())
 asis = comun.asistencia_personas(form)
 c = st.columns(5)
 with c[0]:
-    ui.tarjeta("Base entregada", ui.num(len(df)), "personas en la base de Formalización", ui.NOCHE)
+    estilo.kpi("Base entregada", ui.num(len(df)), "personas en la base de Formalización", "noche")
 with c[1]:
-    ui.tarjeta("Formalizados", ui.num(len(form)), f"frente a {ui.num(C.CUPOS_CONTRATADOS)} cupos del contrato", ui.AZUL)
+    estilo.kpi("Formalizados", ui.num(len(form)), f"frente a {ui.num(C.CUPOS_CONTRATADOS)} cupos del contrato", "azul")
 with c[2]:
-    ui.tarjeta("En formación", ui.num(en_formacion), "formalizados que aún no culminan", ui.AZUL)
+    estilo.kpi("En formación", ui.num(en_formacion), "formalizados que aún no culminan", "profundo")
 with c[3]:
-    ui.tarjeta("Culminaron", ui.num(culminaron), f"≥ {ui.num(C.HORAS_CULMINACION)} h válidas (70 % de 90 h)", ui.NARANJA)
+    estilo.kpi("Culminaron", ui.num(culminaron), f"≥ {ui.num(C.HORAS_CULMINACION)} h válidas (70 % de 90 h)", "naranja")
 with c[4]:
-    ui.tarjeta("Desistieron", ui.num(desistieron),
-               f"{ui.pct(desistieron / len(form) if len(form) else None, 1)} de los formalizados", ui.GRIS)
+    estilo.kpi("Desistieron", ui.num(desistieron),
+               f"{ui.pct(desistieron / len(form) if len(form) else None, 1)} de los formalizados", "celeste")
 
 st.write("")
-st.subheader("Metas del contrato")
+estilo.seccion("Metas del contrato")
 st.caption("Se calculan sobre toda la base, sin filtros. Los índices se liquidan al cierre de las cohortes.")
 pagos = {p["clave"]: p for p in M.pagos(completo)}
 cols = st.columns(4)
@@ -51,11 +51,11 @@ for col, (nombre, p, formula) in zip(cols, fichas):
             valor = "–" if p["alcanzado_pct"] is None else f"{min(p['alcanzado_pct'], 100)} %"
             sub = f"Meta: {ui.pct(p['meta'])} · {formula}"
             extra = ui.barra(p["actual"], p["meta"], color)
-        ui.tarjeta(nombre, valor, sub, color,
-                   extra=f"<div style='margin-top:6px'>{ui.pill(p['estado'], color)}</div>" + extra)
+        avance = (p["culminados"] / C.CUPOS_CONTRATADOS) if p["clave"] == "culminacion" else p["actual"]
+        estilo.meta(nombre, valor, sub, p["estado"], avance, p["meta"])
 
 st.write("")
-st.subheader("Participantes por cohorte y estado")
+estilo.seccion("Participantes por cohorte y estado")
 dist = df.groupby(["cohorte", "estado_atenea"]).size().rename("personas").reset_index()
 fig = px.bar(dist, x="cohorte", y="personas", color="estado_atenea", text="personas",
              category_orders={"estado_atenea": comun.ORDEN_ESTADO}, color_discrete_map=comun.COLOR_ESTADO,

@@ -47,13 +47,13 @@ def estado(f: pd.Series) -> str:
     return "En formación"
 
 
-def filtros_laterales(df: pd.DataFrame) -> None:
-    """Filtros globales en la barra lateral (valen para todas las páginas)."""
-    st.sidebar.markdown("**Filtros**")
+def filtros_banda(df: pd.DataFrame) -> None:
+    """Filtros globales en la banda superior (valen para todas las páginas)."""
+    cols = st.columns(len(FILTROS))
     base = df
-    for col, etiqueta in FILTROS:
+    for c, (col, etiqueta) in zip(cols, FILTROS):
         opciones = sorted(base[col].dropna().astype(str).unique())
-        sel = st.sidebar.multiselect(etiqueta, opciones, key=f"at_{col}", placeholder="Todos")
+        sel = c.multiselect(etiqueta, opciones, key=f"at_{col}", placeholder="Todos")
         if sel:
             base = base[base[col].astype(str).isin(sel)]
 
@@ -67,9 +67,8 @@ def filtrado(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def nota_filtros() -> None:
-    activos = [f"{e}: {', '.join(st.session_state.get(f'at_{c}'))}" for c, e in FILTROS if st.session_state.get(f"at_{c}")]
-    st.caption("Filtros: " + (" · ".join(activos) if activos else "ninguno (toda la base)")
-               + f" · Datos al {hoy():%d/%m/%Y}")
+    """Los filtros ya se ven en la banda: aquí no se repiten."""
+    return None
 
 
 def asistencia_personas(df: pd.DataFrame) -> pd.Series:

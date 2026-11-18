@@ -5,9 +5,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from tcf10 import ui
-from vista_atenea import comun
+from vista_atenea import comun, estilo
 
-ui.inicio("Asistencia", "Asistencia a las sesiones sincrónicas con docente, según el registro en la plataforma")
+estilo.pagina("Asistencia", "Asistencia a las sesiones sincrónicas con docente, según el registro en la plataforma")
 df = comun.filtrado(comun.todos())
 comun.nota_filtros()
 asis, _ = comun.agregados_asistencia(df)
@@ -19,19 +19,19 @@ a, n, s = (int(asis[c].sum()) for c in ("asistieron", "no_asistieron", "sin_regi
 reg = a + n
 c = st.columns(4)
 with c[0]:
-    ui.tarjeta("Asistencia", ui.pct(a / reg if reg else None), f"{ui.num(a)} asistencias de {ui.num(reg)} registradas",
-               ui.AZUL)
+    estilo.kpi("Asistencia", ui.pct(a / reg if reg else None), f"{ui.num(a)} asistencias de {ui.num(reg)} registradas",
+               "azul")
 with c[1]:
-    ui.tarjeta("Sesiones dictadas", ui.num(asis["session_id"].nunique()), f"en {ui.num(asis['grupo'].nunique())} grupos",
-               ui.NOCHE)
+    estilo.kpi("Sesiones dictadas", ui.num(asis["session_id"].nunique()), f"en {ui.num(asis['grupo'].nunique())} grupos",
+               "noche")
 with c[2]:
-    ui.tarjeta("Participantes convocados", ui.num(int(df["enrolado"].sum())), "formalizados del filtro", ui.AZUL)
+    estilo.kpi("Participantes convocados", ui.num(int(df["enrolado"].sum())), "formalizados del filtro", "celeste")
 with c[3]:
-    ui.tarjeta("Asistencia registrada", ui.pct(reg / (reg + s) if reg + s else None),
-               "de los cupos de sesión ya registrados por el docente", ui.NARANJA)
+    estilo.kpi("Asistencia registrada", ui.pct(reg / (reg + s) if reg + s else None),
+               "de los cupos de sesión ya registrados por el docente", "naranja")
 
 st.write("")
-st.subheader("Asistencia por día")
+estilo.seccion("Asistencia por día")
 d = asis.assign(dia=pd.to_datetime(asis["fecha"]).dt.normalize()).groupby("dia", as_index=False)[
     ["asistieron", "no_asistieron"]].sum()
 d["pct"] = d["asistieron"] / (d["asistieron"] + d["no_asistieron"]).where(lambda x: x > 0)

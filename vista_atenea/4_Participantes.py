@@ -7,9 +7,9 @@ import streamlit as st
 from tcf10 import config as C
 from tcf10 import data
 from tcf10 import ui
-from vista_atenea import comun
+from vista_atenea import comun, estilo
 
-ui.inicio("Participantes", "Estado de formación, asistencia y horas de cada participante")
+estilo.pagina("Participantes", "Estado de formación, asistencia y horas de cada participante")
 df = comun.filtrado(comun.todos())
 comun.nota_filtros()
 
@@ -85,17 +85,17 @@ if filas:
     color = comun.COLOR_ESTADO.get(f["estado_atenea"], ui.GRIS)
     k = st.columns(4)
     with k[0]:
-        ui.tarjeta("Estado", f["estado_atenea"], f"{f['cohorte']} · {f['grupo']} · {f['franja']}", color)
+        estilo.kpi("Estado", f["estado_atenea"], f"{f['cohorte']} · {f['grupo']} · {f['franja']}", "noche")
     with k[1]:
-        ui.tarjeta("Asistencia", "–" if pd.isna(f["asistencia"]) else f"{f['asistencia']:.0f} %",
-                   f"{f['sesiones']} sesiones registradas", ui.AZUL)
+        estilo.kpi("Asistencia", "–" if pd.isna(f["asistencia"]) else f"{f['asistencia']:.0f} %",
+                   f"{f['sesiones']} sesiones registradas", "azul")
     with k[2]:
-        ui.tarjeta("Horas válidas", ui.num(f["horas_validas"], 1),
-                   f"{ui.num(f['horas_sinc_val'], 1)} sincrónicas + {ui.num(f['horas_asinc_val'], 1)} asincrónicas",
-                   ui.NOCHE, extra=ui.barra(f["horas_validas"] / C.HORAS_CULMINACION, None, ui.NARANJA))
+        estilo.kpi("Horas válidas", ui.num(f["horas_validas"], 1),
+                   f"{ui.num(f['horas_sinc_val'], 1)} sincrónicas + {ui.num(f['horas_asinc_val'], 1)} asincrónicas · "
+                   f"{ui.pct(min(1, f['horas_validas'] / C.HORAS_CULMINACION))} de 63 h", "profundo")
     with k[3]:
-        ui.tarjeta("Última actividad", ui.fecha_corta(f["ultima_actividad"]),
-                   f"{f['tipo_documento'] or ''} {f['documento'] or ''}".strip() or "–", ui.AZUL)
+        estilo.kpi("Última actividad", ui.fecha_corta(f["ultima_actividad"]),
+                   f"{f['tipo_documento'] or ''} {f['documento'] or ''}".strip() or "–", "azul")
     sesiones, cursos = data.detalle_persona(f["id_sis"])
     izq, der = st.columns([1.2, 1])
     with izq:
