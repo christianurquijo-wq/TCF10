@@ -154,8 +154,16 @@ def fuente_sis() -> str:
     return "sheet" if _cfg().get("sis_sheet_id") else "bq"
 
 
+def _esquema_sis() -> str:
+    """Huella de las columnas que se leen del SIS: si cambian en el código, la caché anterior se descarta sola
+    (sin esto, tras un push la app podía seguir con tablas viejas a las que les faltaban columnas)."""
+    import hashlib
+    from tcf10 import sis_sheet
+    return hashlib.md5(repr(sis_sheet.COLUMNAS).encode()).hexdigest()[:8]
+
+
 @st.cache_data(ttl=900, show_spinner="Leyendo los datos del SIS (Google Sheets)…")
-def _sis_sheet() -> dict[str, pd.DataFrame]:
+def _sis_sheet(esquema: str = "") -> dict[str, pd.DataFrame]:
     """Lee las pestañas VTD10 y devuelve tablas livianas sin datos personales (solo ID SIS e iniciales)."""
     import gspread
     from gspread.utils import DateTimeOption, ValueRenderOption
@@ -245,7 +253,7 @@ def _base_formalizacion() -> pd.DataFrame:
     if fuente_sis() != "sheet":
         raise ErrorConfiguracion("La base de Formalización se cruza por documento con el SIS en Google Sheets: "
                                  "configura `sis_sheet_id` en [tcf10].")
-    t = _sis_sheet()
+    t = _sis_sheet(_esquema_sis())
     mapa = dict(zip(t["docs"]["huella"], t["docs"]["id_sis"].astype(int)))
     try:
         return base_atenea.limpiar(crudo, mapa)
@@ -359,12 +367,12 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
     if desde_sheet:
         from tcf10 import sis_sheet
     if m == "sis":
-        benef, cohortes = base_desde_sis(sis_sheet.base(_sis_sheet()) if desde_sheet else _base_sis())
+        benef, cohortes = base_desde_sis(sis_sheet.base(_sis_sheet(_esquema_sis())) if desde_sheet else _base_sis())
     elif desde_sheet:
         # Base real: «DB Formalización TCF10» cruzada por documento con el SIS; grupo y fechas salen del SIS.
         from tcf10 import base_atenea
-        benef, cohortes = base_atenea.calendario(_base_formalizacion(), sis_sheet.base(_sis_sheet()))
-        franjas = _sis_sheet().get("franjas")
+        benef, cohortes = base_atenea.calendario(_base_formalizacion(), sis_sheet.base(_sis_sheet(_esquema_sis())))
+        franjas = _sis_sheet(_esquema_sis()).get("franjas")
         if franjas is not None and len(franjas):
             mapa = franjas.set_index("grupo")["franja"]
             benef["franja"] = benef["grupo"].map(mapa).fillna(benef["franja"])
@@ -373,7 +381,7 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
         cohortes = limpiar_cohortes(_leer_sheet(cfg.get("pestana_cohortes", "COHORTES")))
     ids = tuple(int(x) for x in benef["id_sis"].dropna().unique() if int(x) > 0)  # negativos = sin usuario SIS
     if desde_sheet:
-        avance = limpiar_avance(sis_sheet.avance(_sis_sheet(), ids, float(cfg.get("horas_por_sesion", 3.0)),
+        avance = limpiar_avance(sis_sheet.avance(_sis_sheet(_esquema_sis()), ids, float(cfg.get("horas_por_sesion", 3.0)),
                                                  float(cfg.get("divisor_time_view", 3600))))
     else:
         avance = limpiar_avance(_avance_bigquery(ids)) if ids else pd.DataFrame(
@@ -409,7 +417,7 @@ def detalle_persona(id_sis: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """(sesiones, cursos) de una persona para la ficha de la app de Atenea."""
     if modo_demo() or fuente_sis() != "sheet" or id_sis is None or int(id_sis) <= 0:
         return pd.DataFrame(), pd.DataFrame()
-    t = _sis_sheet()
+    t = _sis_sheet(_esquema_sis())
     s = t["asis_det"][t["asis_det"]["id_sis"] == int(id_sis)].copy()
     s["Asistencia"] = s.apply(lambda r: "Asistió" if r["attended"] else ("No asistió" if r["not_attended"] else
                               ("Sin registro" if r["is_past_session"] else "Programada")), axis=1)
@@ -436,7 +444,7 @@ def agregados(ids: tuple[int, ...]) -> tuple[pd.DataFrame, pd.DataFrame]:
         return _agregados_demo(ids)
     if fuente_sis() == "sheet":
         from tcf10 import sis_sheet
-        asis, prog = sis_sheet.agregados(_sis_sheet(), ids)
+        asis, prog = sis_sheet.agregados(_sis_sheet(_esquema_sis()), ids)
     else:
         asis, prog = _agregados_bigquery(ids)
     asis["fecha"] = pd.to_datetime(asis["fecha"], errors="coerce")

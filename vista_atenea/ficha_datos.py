@@ -24,7 +24,7 @@ def _cfg_float(nombre: str, defecto: float) -> float:
 def detalle(f: pd.Series, hoy: pd.Timestamp) -> dict:
     if data.modo_demo() or data.fuente_sis() != "sheet" or pd.isna(f["id_sis"]) or int(f["id_sis"]) <= 0:
         return _demo(f, hoy) if data.modo_demo() else _vacio()
-    t = data._sis_sheet()
+    t = data._sis_sheet(data._esquema_sis())
     pid = int(f["id_sis"])
     horas_sesion = _cfg_float("horas_por_sesion", 3.0)
 
@@ -39,7 +39,10 @@ def detalle(f: pd.Series, hoy: pd.Timestamp) -> dict:
     sinc = sesiones[sesiones["estado"] == "Asistió"].assign(h_sinc=horas_sesion)
     sinc = sinc.groupby(sinc["fecha"].dt.normalize())["h_sinc"].sum()
     lg = t["login"][t["login"]["id_sis"] == pid]
-    tv = lg.groupby(lg["log_date"].dt.normalize())["time_view"].sum()
+    if "time_view" in lg:
+        tv = lg.groupby(lg["log_date"].dt.normalize())["time_view"].sum()
+    else:  # caché de una versión anterior sin el tiempo por ingreso: se reparte igual entre los días de ingreso
+        tv = lg.groupby(lg["log_date"].dt.normalize()).size().astype(float)
     total_asinc = float(f.get("horas_asinc", 0) or 0)
     asinc = (tv / tv.sum() * total_asinc) if tv.sum() > 0 else pd.Series(dtype=float)
     diario = pd.concat([sinc.rename("h_sinc"), asinc.rename("h_asinc")], axis=1).fillna(0).sort_index()
