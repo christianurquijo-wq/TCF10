@@ -120,7 +120,8 @@ def _pantalla(error: str = "", google_salir: bool = False) -> None:
                         "<div class='login-eyebrow' style='margin-top:26px'>Informe de seguimiento</div>"
                         "<div class='login-titulo'>Talento Capital · Formación 10</div>"
                         "<div class='login-texto'>Asistencia, progreso y estado de los participantes del contrato "
-                        "ATENEA-497-2026, operado por Kuepa EduTech.</div>", unsafe_allow_html=True)
+                        "ATENEA-497-2026.</div>"
+                        f"<div style='margin-top:26px'>{ui.chip_kuepa()}</div>", unsafe_allow_html=True)
         with der.container(key="login_form"):
             st.markdown("<div class='login-h'>Ingresar</div>", unsafe_allow_html=True)
             if error:

@@ -37,6 +37,9 @@ h2, h3 {font-weight: 600;}
 .cabecera h1 {margin:0; padding:0; font-size:2.1rem; line-height:1.1;}
 .cabecera .bajada {color:#3C4170; font-size:.95rem; margin-top:4px;}
 .cabecera img {height:52px;}
+.cabecera .marcas {display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:flex-end;}
+.cabecera .marcas .sep {width:1px; height:40px; background:#B7D9E6;}
+.cabecera .marcas img.kuepa {height:34px;}
 .tarjeta {background:#FFFFFF; border:1px solid #D3E7EF; border-radius:12px; padding:14px 16px; height:100%;
           box-shadow: 0 1px 3px rgba(20,20,57,.06);}
 .tarjeta h4 {margin:0 0 4px 0; font-size:.8rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
@@ -60,6 +63,25 @@ def _logo(blanco: bool = False) -> str:
     return "data:image/png;base64," + base64.b64encode(ruta.read_bytes()).decode() if ruta.exists() else ""
 
 
+KUEPA_URL = "https://storage.googleapis.com/ket-bucket/bucket/U0378MDRBDW/HE/36b6f0e6d0418eb184abea7bef55a989.png"
+
+
+def logo_kuepa() -> str:
+    """Logo de Kuepa: assets/kuepa.png si existe (recomendado); si no, la URL pública del bucket."""
+    import base64
+    from pathlib import Path
+    ruta = Path(__file__).resolve().parent.parent / "assets" / "kuepa.png"
+    return "data:image/png;base64," + base64.b64encode(ruta.read_bytes()).decode() if ruta.exists() else KUEPA_URL
+
+
+def chip_kuepa(texto: str = "Operado por") -> str:
+    """Sello blanco «Operado por Kuepa»: se lee bien sobre fondos oscuros sin depender de los colores del logo."""
+    return ("<span style='display:inline-flex;align-items:center;gap:8px;background:#FFFFFF;border-radius:10px;"
+            "padding:6px 12px;font-size:.68rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;"
+            f"color:#3C4170;white-space:nowrap'>{html.escape(texto)}"
+            f"<img src='{logo_kuepa()}' alt='Kuepa EduTech' style='height:22px;display:block'></span>")
+
+
 def inicio(titulo: str, subtitulo: str = "") -> None:
     st.markdown(CSS, unsafe_allow_html=True)
     logo = _logo()
@@ -67,7 +89,8 @@ def inicio(titulo: str, subtitulo: str = "") -> None:
         f"<div class='cabecera'><div><div class='eyebrow'>Talento Capital · Formación 10</div>"
         f"<h1>{html.escape(titulo)}</h1>"
         + (f"<div class='bajada'>{html.escape(subtitulo)}</div>" if subtitulo else "")
-        + "</div>" + (f"<img src='{logo}' alt='Agencia Atenea'>" if logo else "") + "</div>",
+        + "</div><div class='marcas'>" + (f"<img src='{logo}' alt='Agencia Atenea'><span class='sep'></span>" if logo else "")
+        + f"<img class='kuepa' src='{logo_kuepa()}' alt='Kuepa EduTech'></div></div>",
         unsafe_allow_html=True)
 
 

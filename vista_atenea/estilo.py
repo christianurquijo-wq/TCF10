@@ -7,6 +7,8 @@ import html
 
 import streamlit as st
 
+from tcf10 import ui
+
 NOCHE, AZUL_PROFUNDO, AZUL, CELESTE, NARANJA = "#141439", "#05247D", "#2051A0", "#B7D9E6", "#E55B0E"
 TONOS = {  # fondo, texto, texto secundario
     "noche": (NOCHE, "#FFFFFF", "#B7D9E6"),
@@ -33,6 +35,8 @@ h1, h2, h3 {font-family:'Barlow Semi Condensed', sans-serif; color:#141439;}
 .banda-titulo {font-family:'Barlow Semi Condensed', sans-serif; font-size:2.3rem; font-weight:700; color:#fff;
                line-height:1.05; margin:2px 0 4px 0;}
 .banda-bajada {color:#B7D9E6; font-size:.95rem;}
+.banda-lado {display:flex; flex-direction:column; align-items:flex-end; gap:10px; flex-shrink:0;}
+@media (max-width: 640px) {.banda-lado {flex-direction:row; align-items:center; flex-wrap:wrap;}}
 .banda-fecha {display:inline-block; background:#05247D; color:#fff; border-radius:20px; padding:4px 12px;
               font-size:.8rem; font-weight:600;}
 .pagina-titulo {font-family:'Barlow Semi Condensed', sans-serif; font-size:1.7rem; font-weight:700; color:#141439;
@@ -93,12 +97,13 @@ def css() -> None:
 
 
 def banda_html(fecha: str) -> str:
-    return (f"<div style='display:flex;justify-content:space-between;align-items:flex-start;gap:16px'>"
+    return (f"<div style='display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap'>"
             f"<div><div class='banda-eyebrow'>Informe de seguimiento · Operador Kuepa EduTech</div>"
             f"<div class='banda-titulo'>Talento Capital · Formación 10</div>"
             f"<div class='banda-bajada'>Contrato ATENEA-497-2026 · Formación en Marketing digital y finanzas, y "
             f"Auxiliar de información y servicio al cliente, con enfoque en Inteligencia Artificial</div></div>"
-            f"<div class='banda-fecha'>Datos al {html.escape(fecha)}</div></div>")
+            f"<div class='banda-lado'>{ui.chip_kuepa()}<div class='banda-fecha'>Datos al {html.escape(fecha)}</div>"
+            f"</div></div>")
 
 
 def pagina(titulo: str, bajada: str = "") -> None:

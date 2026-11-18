@@ -8,7 +8,7 @@ Páginas en pages/; reglas de negocio en tcf10/metrics.py; parámetros del contr
 """
 import streamlit as st
 
-from tcf10.ui import refrescar
+from tcf10.ui import chip_kuepa, refrescar
 
 st.set_page_config(page_title="TCF10 · Seguimiento", page_icon="assets/atenea_icono.png", layout="wide")
 st.logo("assets/atenea_horizontal_blanco.png", icon_image="assets/atenea_icono_blanco.png", size="large")
@@ -28,7 +28,8 @@ paginas = {
 
 with st.sidebar:
     st.markdown("**Talento Capital · Formación 10**")
-    st.caption("Operador: Kuepa EduTech · Contrato ATENEA-497-2026")
+    st.markdown(chip_kuepa(), unsafe_allow_html=True)
+    st.caption("Contrato ATENEA-497-2026")
     if st.button("Actualizar datos", icon=":material/refresh:", width="stretch"):
         refrescar()
         st.rerun()
