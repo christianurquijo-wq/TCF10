@@ -90,3 +90,10 @@ def test_pestana_faltante():
     c = _crudas(); c.pop("asis_res")
     with pytest.raises(S.FaltaEstructura):
         S.preparar(c)
+
+
+def test_franja_por_hora_de_inicio_mas_comun():
+    f = S.franjas_por_grupo(pd.Series(["G1", "G1", "G1", "G2"]),
+                            pd.Series(["2026-11-10 08:00:00", "2026-11-12 08:00:00", "2026-11-14 14:00:00",
+                                       "2026-11-10 18:30:00"])).set_index("grupo")["franja"]
+    assert f["G1"] == "Mañana · 8:00" and f["G2"] == "Noche · 18:30"

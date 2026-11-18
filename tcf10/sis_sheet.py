@@ -109,6 +109,11 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
                                        "id_sis": _num(df["incremental"])}).dropna().drop_duplicates())
     t["docs"] = (pd.concat(pares).drop_duplicates("huella") if pares
                  else pd.DataFrame(columns=["huella", "id_sis"]))
+    # Franja de cada grupo: hora de inicio más frecuente de sus sesiones (columna opcional session_start_date).
+    ad = crudas.get("asis_det")
+    t["franjas"] = (franjas_por_grupo(ad["group_name"], ad["session_start_date"])
+                    if ad is not None and {"group_name", "session_start_date"} <= set(ad.columns)
+                    else pd.DataFrame(columns=["grupo", "franja"]))
     for clave, cols in COLUMNAS.items():
         df = crudas.get(clave)
         if df is None:
@@ -147,6 +152,25 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
 
 
 # ------------------------------------------------------------------ equivalentes de las consultas
+def franja_de_hora(h: float) -> str:
+    if pd.isna(h):
+        return "Sin dato"
+    return "Mañana" if h < 12 else ("Tarde" if h < 18 else "Noche")
+
+
+def franjas_por_grupo(grupos: pd.Series, inicios: pd.Series) -> pd.DataFrame:
+    """«Mañana · 8:00», «Noche · 18:30»… según la hora de inicio más común de las sesiones de cada grupo."""
+    ini = _fecha(inicios)
+    df = pd.DataFrame({"grupo": grupos.astype("string"), "hora": ini.dt.strftime("%H:%M"), "h": ini.dt.hour})
+    df = df.dropna(subset=["grupo", "hora"])
+    if df.empty:
+        return pd.DataFrame(columns=["grupo", "franja"])
+    moda = df.groupby(["grupo", "hora", "h"]).size().reset_index(name="n").sort_values("n", ascending=False)
+    moda = moda.drop_duplicates("grupo")
+    moda["franja"] = [f"{franja_de_hora(h)} · {int(x[:2])}:{x[3:]}" for h, x in zip(moda["h"], moda["hora"])]
+    return moda[["grupo", "franja"]].reset_index(drop=True)
+
+
 def actualizado(t: dict[str, pd.DataFrame]) -> pd.Timestamp:
     """La fuente más antigua de las que alimentan la app (así no se sobreestima la frescura)."""
     marcas = [t["asis_det"]["last_updated_class_session"].max(), t["prog_det"]["last_updated_statistics"].max()]

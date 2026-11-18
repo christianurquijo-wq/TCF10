@@ -71,6 +71,37 @@ def inicio(titulo: str, subtitulo: str = "") -> None:
         unsafe_allow_html=True)
 
 
+def acceso_restringido() -> str:
+    """Páginas con datos por persona: exigen sesión de Google con un correo autorizado.
+    Secrets: [auth] (Google OIDC, igual que el dashboard EFE) y en [tcf10] consulta_correos / consulta_dominios.
+    En modo demo no se pide (los datos son sintéticos)."""
+    if data.modo_demo():
+        return ""
+    try:
+        hay_auth = "auth" in st.secrets
+    except Exception:  # noqa: BLE001
+        hay_auth = False
+    if not hay_auth:
+        st.warning("Esta consulta muestra el estado de cada participante y solo funciona con inicio de sesión. "
+                   "Falta configurar `[auth]` en los Secrets.", icon=":material/lock:")
+        st.stop()
+    if not st.user.is_logged_in:
+        st.info("Inicia sesión con tu cuenta de Google autorizada para consultar participantes.",
+                icon=":material/lock:")
+        st.button("Iniciar sesión con Google", on_click=st.login, type="primary")
+        st.stop()
+    correo = str(st.user.get("email", "")).lower()
+    cfg = data._cfg()
+    correos = {c.strip().lower() for c in cfg.get("consulta_correos", [])}
+    dominios = {d.strip().lower().lstrip("@") for d in cfg.get("consulta_dominios", ["kuepa.com"])}
+    if correo not in correos and correo.split("@")[-1] not in dominios:
+        st.error(f"La cuenta {correo} no está autorizada para esta consulta. Pide acceso a Christian.",
+                 icon=":material/block:")
+        st.button("Cerrar sesión", on_click=st.logout)
+        st.stop()
+    return correo
+
+
 def num(x, dec: int = 0) -> str:
     if x is None or pd.isna(x):
         return "–"

@@ -121,6 +121,7 @@ def limpiar(crudo: pd.DataFrame, huella_a_id: dict[str, int]) -> pd.DataFrame:
         "lab_inicio": trabajando.map(lambda v: "Desempleado" if v.endswith("NO") else
                                      ("Trabajando" if v.endswith("SI") else "")),
         "en_sis": ~sin_sis,
+        "huella": doc,                                      # para buscar por cédula sin guardar la cédula
         "fuente": "formalizacion",
     })[validas]
     df["certificado"] = pd.Series([None] * len(df), index=df.index, dtype=object)
