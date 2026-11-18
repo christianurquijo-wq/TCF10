@@ -71,7 +71,7 @@ def inicio(titulo: str, subtitulo: str = "") -> None:
         unsafe_allow_html=True)
 
 
-def acceso_restringido() -> str:
+def acceso_restringido(seccion: str = "tcf10", dominios_def=("kuepa.com",)) -> str:
     """Páginas con datos por persona: exigen sesión de Google con un correo autorizado.
     Secrets: [auth] (Google OIDC, igual que el dashboard EFE) y en [tcf10] consulta_correos / consulta_dominios.
     En modo demo no se pide (los datos son sintéticos)."""
@@ -96,10 +96,16 @@ def acceso_restringido() -> str:
         st.stop()
     correo = str(st.user.get("email", "")).lower()
     cfg = data._cfg()
-    correos = {c.strip().lower() for c in cfg.get("consulta_correos", [])}
-    dominios = {d.strip().lower().lstrip("@") for d in cfg.get("consulta_dominios", ["kuepa.com"])}
+    if seccion != "tcf10":
+        try:
+            cfg = dict(st.secrets.get(seccion, {}))
+        except Exception:  # noqa: BLE001
+            cfg = {}
+    correos = {c.strip().lower() for c in cfg.get("consulta_correos", cfg.get("correos", []))}
+    dominios = {d.strip().lower().lstrip("@")
+                for d in cfg.get("consulta_dominios", cfg.get("dominios", list(dominios_def)))}
     if correo not in correos and correo.split("@")[-1] not in dominios:
-        st.error(f"La cuenta {correo} no está autorizada para esta consulta. Pide acceso a Christian.",
+        st.error(f"La cuenta {correo} no está autorizada para esta consulta. Solicita acceso al equipo de Kuepa.",
                  icon=":material/block:")
         st.button("Cerrar sesión", on_click=st.logout)
         st.stop()
@@ -187,7 +193,7 @@ def refrescar() -> None:
 def filtros(df: pd.DataFrame, clave: str, columnas=("cohorte", "perfil", "nivel")) -> pd.DataFrame:
     cols = st.columns(len(columnas))
     etiquetas = {"cohorte": "Cohorte", "perfil": "Perfil", "nivel": "Nivel", "docente": "Docente",
-                 "grupo": "Grupo", "riesgo": "Riesgo", "poblacion": "Población"}
+                 "grupo": "Grupo", "riesgo": "Riesgo", "poblacion": "Población", "franja": "Franja"}
     for col, c in zip(cols, columnas):
         opciones = sorted(df[c].dropna().astype(str).unique())
         elegido = col.multiselect(etiquetas.get(c, c), opciones, key=f"{clave}_{c}", placeholder="Todos")

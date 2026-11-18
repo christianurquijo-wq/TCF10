@@ -211,10 +211,9 @@ def _leer_sheet(pestana: str) -> pd.DataFrame:
     return pd.DataFrame(valores[1:], columns=valores[0]) if valores else pd.DataFrame()
 
 
-@st.cache_data(ttl=900, show_spinner="Leyendo la base de Formalización…")
-def _base_formalizacion() -> pd.DataFrame:
-    """Lee la base «DB Formalización TCF10» y la deja SIN datos personales (solo huella del documento,
-    iniciales y columnas del contrato). Lo que queda en caché ya está limpio."""
+def _formalizacion_cruda() -> pd.DataFrame:
+    """Base «DB Formalización TCF10» tal cual (con datos personales). No se cachea: quien la llame decide qué
+    columnas conserva."""
     import gspread
     from tcf10 import base_atenea
     cfg = _cfg()
@@ -235,7 +234,14 @@ def _base_formalizacion() -> pd.DataFrame:
     valores = ws.get_all_values()
     if not base_atenea.es_formalizacion(valores):
         raise ErrorConfiguracion(f"La pestaña «{ws.title}» no tiene la columna NUMERO_DOCUMENTO.")
-    crudo = base_atenea.a_dataframe(valores)
+    return base_atenea.a_dataframe(valores)
+
+
+@st.cache_data(ttl=900, show_spinner="Leyendo la base de Formalización…")
+def _base_formalizacion() -> pd.DataFrame:
+    """Base de Formalización SIN datos personales (huella del documento, iniciales y columnas del contrato)."""
+    from tcf10 import base_atenea
+    crudo = _formalizacion_cruda()
     if fuente_sis() != "sheet":
         raise ErrorConfiguracion("La base de Formalización se cruza por documento con el SIS en Google Sheets: "
                                  "configura `sis_sheet_id` en [tcf10].")
@@ -376,6 +382,48 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
     return benef, avance, cohortes, False
 
 
+# ------------------------------------------------------------------ vista Atenea (detrás de login)
+@st.cache_data(ttl=900, show_spinner="Leyendo la base de Formalización…")
+def identidades() -> pd.DataFrame:
+    """Nombre completo y documento por huella, SOLO para la app de Atenea (detrás de login con correos de
+    Atenea y Kuepa). Atenea es la dueña de la base: aquí no se agrega información que no tenga."""
+    from tcf10 import base_atenea as B
+    if modo_demo():
+        demo = pd.read_csv(DEMO / "beneficiarios.csv", dtype=str)
+        return pd.DataFrame({"id_sis": pd.to_numeric(demo["ID SIS"]).astype("Int64"),
+                             "nombre_completo": demo["Nombre"], "tipo_documento": "CC",
+                             "documento": demo["Documento"]})
+    crudo = _formalizacion_cruda()
+    por_plano = {B._plano(c): c for c in crudo.columns}
+    col = lambda *n: next((crudo[por_plano[B._plano(x)]] for x in n if B._plano(x) in por_plano),  # noqa: E731
+                          pd.Series([""] * len(crudo), index=crudo.index)).astype("string").fillna("").str.strip()
+    nombre = (col("PRIMER_NOMBRE") + " " + col("SEGUNDO_NOMBRE") + " " + col("PRIMER_APELLIDO") + " "
+              + col("SEGUNDO_APELLIDO")).str.replace(r"\s+", " ", regex=True).str.strip().str.title()
+    out = pd.DataFrame({"huella": B.huella(col("NUMERO_DOCUMENTO")), "nombre_completo": nombre,
+                        "tipo_documento": col("TIPO_DOCUMENTO").str.title(),
+                        "documento": B.doc_normalizado(col("NUMERO_DOCUMENTO"))})
+    return out.dropna(subset=["huella"]).drop_duplicates("huella")
+
+
+def detalle_persona(id_sis: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(sesiones, cursos) de una persona para la ficha de la app de Atenea."""
+    if modo_demo() or fuente_sis() != "sheet" or id_sis is None or int(id_sis) <= 0:
+        return pd.DataFrame(), pd.DataFrame()
+    t = _sis_sheet()
+    s = t["asis_det"][t["asis_det"]["id_sis"] == int(id_sis)].copy()
+    s["Asistencia"] = s.apply(lambda r: "Asistió" if r["attended"] else ("No asistió" if r["not_attended"] else
+                              ("Sin registro" if r["is_past_session"] else "Programada")), axis=1)
+    ses = (s.sort_values("session_date")[["session_date", "session_number", "group_name", "Asistencia"]]
+            .rename(columns={"session_date": "Fecha", "session_number": "Sesión", "group_name": "Grupo"}))
+    c = t["prog_cur"][t["prog_cur"]["id_sis"] == int(id_sis)].copy()
+    cur = pd.DataFrame({"Curso": c["course_name"], "Avance": c["course_completed_status"] / 100,
+                        "Lecciones": c["lessons_completed"].fillna(0).astype(int).astype(str) + " de "
+                                     + c["lessons_active"].fillna(0).astype(int).astype(str),
+                        "Estado": c["progress_status"].map({"completado": "Completado", "en_progreso": "En progreso",
+                                                            "sin_iniciar": "Sin iniciar"})})
+    return ses.reset_index(drop=True), cur.reset_index(drop=True)
+
+
 # ------------------------------------------------------------------ agregados del SIS (página de asistencia)
 @st.cache_data(ttl=3600, show_spinner="Consultando asistencia y avance por curso…")
 def _agregados_bigquery(ids: tuple[int, ...]) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -432,5 +480,6 @@ def _completar_grupo(benef: pd.DataFrame, avance: pd.DataFrame) -> pd.DataFrame:
 
 
 def refrescar() -> None:
-    for f in (_leer_sheet, _avance_bigquery, _base_sis, _agregados_bigquery, _sis_sheet, _base_formalizacion):
+    for f in (_leer_sheet, _avance_bigquery, _base_sis, _agregados_bigquery, _sis_sheet, _base_formalizacion,
+              identidades):
         f.clear()
