@@ -5,13 +5,13 @@ Talento Capital Formación 10 · vista para la Agencia Atenea (cliente).
 
 App aparte del tablero interno (app.py): mismo repositorio y mismos cálculos, otro enlace, otros secretos y
 otro diseño (navegación superior, banda institucional con filtros, sin barra lateral).
-Exige inicio de sesión con Google: correos @agenciaatenea.gov.co y @kuepa.com (ajustable en [atenea]).
+Ingreso con usuario y contraseña (cuentas en [atenea.usuarios]) o con Google (@agenciaatenea.gov.co, @kuepa.com).
 Muestra nombre y documento de los participantes; no muestra montos ni clasificación de riesgo.
 """
 import streamlit as st
 
 from tcf10 import ui
-from vista_atenea import comun, estilo
+from vista_atenea import acceso, comun, estilo
 
 st.set_page_config(page_title="Talento Capital F10 · Atenea", page_icon="assets/atenea_icono.png", layout="wide",
                    initial_sidebar_state="collapsed")
@@ -24,10 +24,15 @@ paginas = [
     st.Page("vista_atenea/3_Progreso.py", title="Progreso", icon=":material/trending_up:", url_path="progreso"),
     st.Page("vista_atenea/4_Participantes.py", title="Participantes", icon=":material/badge:", url_path="participantes"),
     st.Page("vista_atenea/5_Ficha.py", title="Ficha", icon=":material/person_search:", url_path="ficha"),
+    st.Page("vista_atenea/6_Looker.py", title="Tablero Looker", icon=":material/insert_chart:", url_path="looker"),
 ]
-nav = st.navigation(paginas, position="top")
-
-correo = ui.acceso_restringido("atenea", ("agenciaatenea.gov.co", "kuepa.com"))
+# Sin sesión: menú oculto y pantalla de ingreso (usuario/contraseña de prueba o Google)
+sesion = acceso.sesion_actual()
+nav = st.navigation(paginas, position="top" if sesion else "hidden")
+if not sesion:
+    acceso.pantalla_ingreso()
+acceso.aviso_modo(sesion)
+correo = sesion.get("nombre", "")
 
 
 # Banda institucional con los filtros globales (aplican a todas las páginas)
@@ -41,6 +46,7 @@ with st.container(key="banda"):
         ui.refrescar()
         st.rerun()
     if correo:
-        pie[2].button("Salir", icon=":material/logout:", on_click=st.logout, width="stretch")
+        pie[2].button("Salir", icon=":material/logout:", on_click=acceso.cerrar_sesion, args=(sesion,),
+                      width="stretch")
 
 nav.run()
