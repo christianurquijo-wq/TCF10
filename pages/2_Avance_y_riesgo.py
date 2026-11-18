@@ -64,6 +64,7 @@ lista = en_curso[en_curso["riesgo"].isin(niveles)].copy()
 lista["orden"] = lista["riesgo"].map({"Alto": 0, "Medio": 1, "Bajo": 2})
 lista = lista.sort_values(["orden", "ritmo", "dias_sin_actividad"], ascending=[True, True, False])
 lista["persona"] = lista["nombre"].map(ui.iniciales)
+lista["id_sis"] = lista["id_sis"].where(lista["id_sis"] > 0)  # negativos = sin usuario en el SIS
 lista["motivo"] = lista.apply(M.motivo_riesgo, axis=1)
 lista["faltan_h"] = (C.HORAS_CULMINACION - lista["horas_validas"]).clip(lower=0)
 vista = lista[["riesgo", "id_sis", "persona", "cohorte", "grupo", "docente", "gestor", "horas_sinc_val",

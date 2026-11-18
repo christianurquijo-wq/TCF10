@@ -94,6 +94,8 @@ def _riesgo(f: pd.Series) -> str:
         return "Culminó"
     if not f["cohorte_iniciada"]:
         return "Sin iniciar"
+    if f.get("en_sis") in (False,):  # formalizado sin usuario en la plataforma: no puede estudiar
+        return "Alto"
     if f["cohorte_cerrada"]:
         return "No culminó"
     inactivo = f["dias_sin_actividad"] if f["dias_desde_inicio"] >= C.RIESGO_GRACIA_DIAS else 0
@@ -117,6 +119,8 @@ def _riesgo(f: pd.Series) -> str:
 
 def motivo_riesgo(f: pd.Series) -> str:
     partes = []
+    if f.get("en_sis") in (False,):
+        return "formalizado pero sin usuario en el SIS"
     if (pd.notna(f.get("dias_desde_inicio")) and f["dias_desde_inicio"] < C.RIESGO_FASE_INICIAL_DIAS
             and pd.notna(f.get("sesiones_registradas")) and f["sesiones_registradas"] >= C.RIESGO_MIN_SESIONES):
         asis, reg = int(f["sesiones_asistidas"] or 0), int(f["sesiones_registradas"])
@@ -266,6 +270,11 @@ def alertas_equipo(df: pd.DataFrame) -> list[str]:
                     f"{C.MAX_ACTIVOS_POR_GRUPO} por grupo acordado con Atenea ({r['activos'] - C.MAX_ACTIVOS_POR_GRUPO} de más).")
     for _, r in d[d["alerta"] != ""].iterrows():
         msgs.append(f"{r['docente']} · {r['cohorte']}: {r['alerta'].lower()}.")
+    if "en_sis" in df:
+        sin = int((df["enrolado"] & ~df["retirado"] & ~df["en_sis"].astype(bool)).sum())
+        if sin:
+            msgs.insert(0, f"{sin} personas formalizadas no tienen usuario en el SIS (no se encontró su documento): "
+                           "no pueden registrar asistencia ni avance.")
     base = df[df["enrolado"] & ~df["retirado"] & df["franja"].ne("Sin dato")]
     for coh, s in base.groupby("cohorte")["franja"]:
         if s.nunique() < C.MIN_FRANJAS:

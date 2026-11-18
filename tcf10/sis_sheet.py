@@ -99,6 +99,16 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     if faltan:
         raise FaltaEstructura(f"Faltan pestañas del SIS en el Sheet: {', '.join(faltan)}.")
     t: dict[str, pd.DataFrame] = {}
+    # Documento → ID SIS para cruzar con la base de Formalización. Se guarda solo la huella (hash) del documento.
+    from tcf10.base_atenea import huella
+    pares = []
+    for clave in ("asis_res", "prog_cur", "asis_det", "prog_det"):
+        df = crudas.get(clave)
+        if df is not None and {"student_doc", "incremental"} <= set(df.columns):
+            pares.append(pd.DataFrame({"huella": huella(df["student_doc"]),
+                                       "id_sis": _num(df["incremental"])}).dropna().drop_duplicates())
+    t["docs"] = (pd.concat(pares).drop_duplicates("huella") if pares
+                 else pd.DataFrame(columns=["huella", "id_sis"]))
     for clave, cols in COLUMNAS.items():
         df = crudas.get(clave)
         if df is None:

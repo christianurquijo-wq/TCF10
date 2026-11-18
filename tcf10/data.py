@@ -211,6 +211,42 @@ def _leer_sheet(pestana: str) -> pd.DataFrame:
     return pd.DataFrame(valores[1:], columns=valores[0]) if valores else pd.DataFrame()
 
 
+@st.cache_data(ttl=900, show_spinner="Leyendo la base de Formalización…")
+def _base_formalizacion() -> pd.DataFrame:
+    """Lee la base «DB Formalización TCF10» y la deja SIN datos personales (solo huella del documento,
+    iniciales y columnas del contrato). Lo que queda en caché ya está limpio."""
+    import gspread
+    from tcf10 import base_atenea
+    cfg = _cfg()
+    gc = gspread.authorize(_credenciales(["https://www.googleapis.com/auth/spreadsheets.readonly"]))
+    try:
+        libro = gc.open_by_key(cfg["sheet_id"])
+    except gspread.exceptions.APIError as e:
+        raise ErrorConfiguracion(
+            f"No se pudo abrir la base de Formalización ({e.response.status_code}). Compártela como Lector con "
+            f"{st.secrets['gcp_service_account'].get('client_email', 'la cuenta de servicio')}.") from e
+    hojas = libro.worksheets()
+    pedida = cfg.get("pestana_beneficiarios")
+    ws = (next((w for w in hojas if _plano(w.title) == _plano(pedida)), None) if pedida else
+          next((w for w in hojas if "formalizacion" in _plano(w.title)), None))
+    if ws is None:
+        raise ErrorConfiguracion(f"No encontré la pestaña de la base ({pedida or 'Formalización TCF10'}). "
+                                 f"Pestañas: {', '.join(w.title for w in hojas)}.")
+    valores = ws.get_all_values()
+    if not base_atenea.es_formalizacion(valores):
+        raise ErrorConfiguracion(f"La pestaña «{ws.title}» no tiene la columna NUMERO_DOCUMENTO.")
+    crudo = base_atenea.a_dataframe(valores)
+    if fuente_sis() != "sheet":
+        raise ErrorConfiguracion("La base de Formalización se cruza por documento con el SIS en Google Sheets: "
+                                 "configura `sis_sheet_id` en [tcf10].")
+    t = _sis_sheet()
+    mapa = dict(zip(t["docs"]["huella"], t["docs"]["id_sis"].astype(int)))
+    try:
+        return base_atenea.limpiar(crudo, mapa)
+    except ValueError as e:
+        raise ErrorConfiguracion(str(e)) from e
+
+
 def _bq(archivo: str, ids: tuple[int, ...] | None = None, **escalares: float) -> pd.DataFrame:
     """Corre queries/<archivo>.sql con {dataset} reemplazado y parámetros @ids_sis / escalares FLOAT64."""
     from google.cloud import bigquery
@@ -318,10 +354,14 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
         from tcf10 import sis_sheet
     if m == "sis":
         benef, cohortes = base_desde_sis(sis_sheet.base(_sis_sheet()) if desde_sheet else _base_sis())
+    elif desde_sheet:
+        # Base real: «DB Formalización TCF10» cruzada por documento con el SIS; grupo y fechas salen del SIS.
+        from tcf10 import base_atenea
+        benef, cohortes = base_atenea.calendario(_base_formalizacion(), sis_sheet.base(_sis_sheet()))
     else:
         benef = limpiar_beneficiarios(_leer_sheet(cfg.get("pestana_beneficiarios", "BENEFICIARIOS")))
         cohortes = limpiar_cohortes(_leer_sheet(cfg.get("pestana_cohortes", "COHORTES")))
-    ids = tuple(int(x) for x in benef["id_sis"].dropna().unique())
+    ids = tuple(int(x) for x in benef["id_sis"].dropna().unique() if int(x) > 0)  # negativos = sin usuario SIS
     if desde_sheet:
         avance = limpiar_avance(sis_sheet.avance(_sis_sheet(), ids, float(cfg.get("horas_por_sesion", 3.0)),
                                                  float(cfg.get("divisor_time_view", 3600))))
@@ -388,5 +428,5 @@ def _completar_grupo(benef: pd.DataFrame, avance: pd.DataFrame) -> pd.DataFrame:
 
 
 def refrescar() -> None:
-    for f in (_leer_sheet, _avance_bigquery, _base_sis, _agregados_bigquery, _sis_sheet):
+    for f in (_leer_sheet, _avance_bigquery, _base_sis, _agregados_bigquery, _sis_sheet, _base_formalizacion):
         f.clear()
