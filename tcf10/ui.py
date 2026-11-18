@@ -1,4 +1,6 @@
-"""Componentes visuales compartidos (marca Kuepa, tarjetas, formato colombiano)."""
+"""Componentes visuales compartidos: identidad de la Agencia Atenea (Manual de marca 2026), tarjetas y
+formato colombiano. La paleta sale del manual; rojo y verde solo para semáforos (Alcaldía permite el rojo
+de la marca Bogotá como recurso puntual)."""
 from __future__ import annotations
 
 import html
@@ -11,9 +13,12 @@ import streamlit as st
 from tcf10 import config as C
 from tcf10 import data, metrics
 
-NARANJA, AZUL, VERDE, AMARILLO, ROJO, GRIS = "#FD531E", "#1F4E9C", "#1A9E86", "#E58A00", "#D64541", "#8C8C8C"
-COLOR_RIESGO = {"Alto": ROJO, "Medio": AMARILLO, "Bajo": VERDE, "Culminó": AZUL, "Retirado": GRIS,
-                "No culminó": "#5A5A5A", "Sin iniciar": "#BDBDBD", "Sin enrolar": "#D9D9D9"}
+# Manual de marca Atenea 2026 · esquema cromático
+NOCHE, AZUL_PROFUNDO, AZUL, CELESTE, NARANJA_CLARO, NARANJA = (
+    "#141439", "#05247D", "#2051A0", "#B7D9E6", "#EF6F18", "#E55B0E")
+VERDE, AMARILLO, ROJO, GRIS = "#2E8B57", "#EF6F18", "#C8102E", "#8A8FA8"  # semáforos
+COLOR_RIESGO = {"Alto": ROJO, "Medio": NARANJA_CLARO, "Bajo": AZUL, "Culminó": NOCHE, "Retirado": GRIS,
+                "No culminó": "#5B5F7A", "Sin iniciar": CELESTE, "Sin enrolar": "#DCE3EA"}
 ORDEN_RIESGO = ["Culminó", "Bajo", "Medio", "Alto", "No culminó", "Retirado", "Sin iniciar", "Sin enrolar"]
 COLOR_ESTADO = {"Cumplido": VERDE, "En curso": AZUL, "No cumplido": ROJO, "Sin datos": GRIS}
 TZ = timezone(timedelta(hours=-5))
@@ -21,24 +26,49 @@ HOY_DEMO = pd.Timestamp("2026-11-13")  # fecha con la que se generaron los datos
 
 CSS = """
 <style>
-.block-container {padding-top: 2rem;}
-.tarjeta {border:1px solid rgba(128,128,128,.25); border-radius:12px; padding:14px 16px; height:100%;}
-.tarjeta h4 {margin:0 0 4px 0; font-size:.95rem;}
-.valor {font-size:1.9rem; font-weight:700; line-height:1.15;}
-.sub {font-size:.82rem; opacity:.75;}
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap');
+.block-container {padding-top: 1.6rem;}
+h1, h2, h3 {font-family: 'Barlow Semi Condensed', sans-serif; color: #141439; letter-spacing: -.01em;}
+h1 {font-weight: 700;}
+h2, h3 {font-weight: 600;}
+.cabecera {display:flex; align-items:center; justify-content:space-between; gap:16px;
+           border-bottom: 2px solid #B7D9E6; padding-bottom: 10px; margin-bottom: 6px;}
+.cabecera .eyebrow {font-size:.8rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:#E55B0E;}
+.cabecera h1 {margin:0; padding:0; font-size:2.1rem; line-height:1.1;}
+.cabecera .bajada {color:#3C4170; font-size:.95rem; margin-top:4px;}
+.cabecera img {height:52px;}
+.tarjeta {background:#FFFFFF; border:1px solid #D3E7EF; border-radius:12px; padding:14px 16px; height:100%;
+          box-shadow: 0 1px 3px rgba(20,20,57,.06);}
+.tarjeta h4 {margin:0 0 4px 0; font-size:.8rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+             color:#3C4170;}
+.valor {font-family:'Barlow Semi Condensed', sans-serif; font-size:2.1rem; font-weight:700; line-height:1.1;}
+.sub {font-size:.85rem; color:#4A4F78;}
 .pill {display:inline-block; padding:2px 10px; border-radius:10px; font-size:.72rem; font-weight:700; color:#fff;}
-.barra {height:8px; border-radius:4px; background:rgba(128,128,128,.2); margin:8px 0 4px 0; position:relative;}
+.barra {height:8px; border-radius:4px; background:#EEF6F9; margin:8px 0 4px 0; position:relative;}
 .barra > span {display:block; height:8px; border-radius:4px;}
-.barra > i {position:absolute; top:-3px; width:2px; height:14px; background:#333;}
+.barra > i {position:absolute; top:-3px; width:2px; height:14px; background:#141439;}
+[data-testid="stCaptionContainer"] {color:#4A4F78;}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"], [data-testid="stSidebar"] small {color:#B7D9E6 !important;}
 </style>
 """
+def _logo(blanco: bool = False) -> str:
+    """Logo horizontal de Atenea embebido (data URI) para la cabecera."""
+    import base64
+    from pathlib import Path
+    ruta = Path(__file__).resolve().parent.parent / "assets" / (
+        "atenea_horizontal_blanco.png" if blanco else "atenea_horizontal.png")
+    return "data:image/png;base64," + base64.b64encode(ruta.read_bytes()).decode() if ruta.exists() else ""
 
 
 def inicio(titulo: str, subtitulo: str = "") -> None:
     st.markdown(CSS, unsafe_allow_html=True)
-    st.title(titulo)
-    if subtitulo:
-        st.caption(subtitulo)
+    logo = _logo()
+    st.markdown(
+        f"<div class='cabecera'><div><div class='eyebrow'>Talento Capital · Formación 10</div>"
+        f"<h1>{html.escape(titulo)}</h1>"
+        + (f"<div class='bajada'>{html.escape(subtitulo)}</div>" if subtitulo else "")
+        + "</div>" + (f"<img src='{logo}' alt='Agencia Atenea'>" if logo else "") + "</div>",
+        unsafe_allow_html=True)
 
 
 def num(x, dec: int = 0) -> str:
@@ -132,8 +162,13 @@ def filtros(df: pd.DataFrame, clave: str, columnas=("cohorte", "perfil", "nivel"
 
 
 def dark_layout(fig, height: int = 340):
+    """Estilo de gráfica Atenea (el nombre se conserva para no tocar las páginas)."""
     fig.update_layout(height=height, margin=dict(t=40, b=10, l=10, r=10), legend_title_text="",
-                      paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                      template="plotly_white", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                      font=dict(family="Barlow Semi Condensed, Arial, sans-serif", size=13, color=NOCHE),
+                      hoverlabel=dict(font_family="Barlow Semi Condensed, Arial, sans-serif"))
+    fig.update_xaxes(gridcolor="#E3EEF3", linecolor="#B7D9E6", zerolinecolor="#B7D9E6")
+    fig.update_yaxes(gridcolor="#E3EEF3", linecolor="#B7D9E6", zerolinecolor="#B7D9E6")
     return fig
 
 

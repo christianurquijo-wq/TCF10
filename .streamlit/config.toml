@@ -1,6 +1,24 @@
+# Identidad visual Agencia Atenea (Manual de marca 2026): azul noche #141439, azules #05247D / #2051A0,
+# azul claro #B7D9E6 y naranjas #EF6F18 / #E55B0E. Tipografía de marca: Museo Sans Condensed (licenciada);
+# en la web se usa Barlow Semi Condensed (Google Fonts), de proporciones parecidas.
 [theme]
-base = "dark"
-primaryColor = "#F28C28"
+base = "light"
+primaryColor = "#E55B0E"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#EEF6F9"
+textColor = "#141439"
+linkColor = "#2051A0"
+borderColor = "#D3E7EF"
+baseRadius = "0.6rem"
+font = "Barlow Semi Condensed:https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap"
+headingFont = "Barlow Semi Condensed:https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap"
+chartCategoricalColors = ["#2051A0", "#E55B0E", "#141439", "#B7D9E6", "#EF6F18", "#05247D"]
+
+[theme.sidebar]
+backgroundColor = "#141439"
+secondaryBackgroundColor = "#05247D"
+textColor = "#FFFFFF"
+borderColor = "#2A2A5C"
 
 [server]
 headless = true
