@@ -103,8 +103,8 @@ else:
     fig.update_layout(yaxis_title="Horas acumuladas", hovermode="x unified", legend=dict(orientation="h", y=1.12),
                       xaxis=dict(range=[inicio, fin if pd.notna(fin) else hoy]), separators=",.")
     st.plotly_chart(ui.dark_layout(fig, 360), width="stretch")
-    st.caption("Sincrónicas: sesiones asistidas con el docente. Asincrónicas: tiempo en la plataforma, distribuido "
-               "según los días de ingreso. La línea punteada es el avance esperado para completar 90 h al cierre.")
+    st.caption("Sincrónicas: sesiones asistidas con el docente. Asincrónicas: horas acreditadas en la plataforma "
+               "(Horas_Plataforma_Acreditadas), distribuidas según los días de ingreso. La línea punteada es el avance esperado para completar 90 h al cierre.")
 
 # ------------------------------------------------------------------ asistencia sesión por sesión
 izq, der = st.columns([1.35, 1])
@@ -114,14 +114,18 @@ with izq:
         st.info("Sin sesiones en la plataforma para este participante.")
     else:
         fig = go.Figure()
+        # Eje por categoría: solo los días con sesión, sin huecos entre una clase y otra.
+        orden = ses.sort_values("fecha")
+        orden = orden.assign(etiqueta=orden["fecha"].map(ui.etiqueta_dia))
         for e in FD.ESTADOS_SESION:
-            x = ses[ses["estado"] == e]
+            x = orden[orden["estado"] == e]
             if len(x):
-                fig.add_scatter(x=x["fecha"], y=[""] * len(x), mode="markers", name=e,
+                fig.add_scatter(x=x["etiqueta"], y=[""] * len(x), mode="markers", name=e,
                                 marker=dict(size=18, color=COLOR_SESION[e], line=dict(width=1, color="#fff")),
-                                customdata=x["sesion"], hovertemplate="Sesión %{customdata} · %{x|%d/%m/%Y}<extra>" + e + "</extra>")
-        fig.add_vline(x=hoy, line_dash="dot", line_color=ui.NOCHE)
-        fig.update_layout(yaxis=dict(visible=False), legend=dict(orientation="h", y=1.25), margin=dict(t=30))
+                                customdata=x["sesion"], hovertemplate="Sesión %{customdata} · %{x}<extra>" + e + "</extra>")
+        fig.update_layout(xaxis=dict(type="category", categoryorder="array",
+                                     categoryarray=orden["etiqueta"].drop_duplicates().tolist()),
+                          yaxis=dict(visible=False), legend=dict(orientation="h", y=1.25), margin=dict(t=30))
         st.plotly_chart(ui.dark_layout(fig, 170), width="stretch")
         racha, maxr = 0, 0
         for e in pasadas.sort_values("fecha")["estado"]:

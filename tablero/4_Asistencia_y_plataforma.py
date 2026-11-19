@@ -62,12 +62,16 @@ st.caption("Porcentaje de asistencia sobre la asistencia registrada. Una caída 
 sem = asis.dropna(subset=["fecha"]).copy()
 sem["semana"] = sem["fecha"].dt.normalize() if diaria else sem["fecha"].dt.to_period("W-SUN").dt.start_time
 sem = sem.groupby("semana", as_index=False)[["asistieron", "no_asistieron", "sin_registro"]].sum()
-sem["asistencia"] = sem["asistieron"] / (sem["asistieron"] + sem["no_asistieron"]).where(lambda s: s > 0)
+# Solo los días/semanas con asistencia registrada: sin huecos vacíos en el eje (eje por categoría).
+sem = sem[(sem["asistieron"] + sem["no_asistieron"]) > 0].sort_values("semana")
+sem["asistencia"] = sem["asistieron"] / (sem["asistieron"] + sem["no_asistieron"])
+sem["etiqueta"] = sem["semana"].map(ui.etiqueta_dia if diaria else (lambda d: f"Sem. {d:%d/%m}"))
 fig = go.Figure()
-fig.add_bar(x=sem["semana"], y=sem["asistieron"], name="Asistieron", marker_color=ui.AZUL, yaxis="y2", opacity=.35)
-fig.add_scatter(x=sem["semana"], y=sem["asistencia"], name="% asistencia", mode="lines+markers",
+fig.add_bar(x=sem["etiqueta"], y=sem["asistieron"], name="Asistieron", marker_color=ui.AZUL, yaxis="y2", opacity=.35)
+fig.add_scatter(x=sem["etiqueta"], y=sem["asistencia"], name="% asistencia", mode="lines+markers",
                 line=dict(color=ui.NARANJA, width=3))
-fig.update_layout(yaxis=dict(title="% asistencia", tickformat=".0%", range=[0, 1]),
+fig.update_layout(xaxis=dict(type="category"),
+                  yaxis=dict(title="% asistencia", tickformat=".0%", range=[0, 1]),
                   yaxis2=dict(title="Asistencias", overlaying="y", side="right", showgrid=False),
                   xaxis_title=None, separators=",.", legend=dict(orientation="h", y=1.12))
 st.plotly_chart(ui.dark_layout(fig, 340), width="stretch")

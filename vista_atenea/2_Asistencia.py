@@ -17,7 +17,7 @@ if asis.empty:
 
 a, n, s = (int(asis[c].sum()) for c in ("asistieron", "no_asistieron", "sin_registro"))
 reg = a + n
-c = st.columns(4)
+c = estilo.fila(4, "asis")
 with c[0]:
     estilo.kpi("Asistencia", ui.pct(a / reg if reg else None), f"{ui.num(a)} asistencias de {ui.num(reg)} registradas",
                "azul")
@@ -34,11 +34,15 @@ st.write("")
 estilo.seccion("Asistencia por día")
 d = asis.assign(dia=pd.to_datetime(asis["fecha"]).dt.normalize()).groupby("dia", as_index=False)[
     ["asistieron", "no_asistieron"]].sum()
-d["pct"] = d["asistieron"] / (d["asistieron"] + d["no_asistieron"]).where(lambda x: x > 0)
+# Solo los días con asistencia registrada (eje por categoría): los días sin sesiones no quedan como huecos vacíos.
+d = d[(d["asistieron"] + d["no_asistieron"]) > 0].sort_values("dia")
+d["pct"] = d["asistieron"] / (d["asistieron"] + d["no_asistieron"])
+d["etiqueta"] = d["dia"].map(ui.etiqueta_dia)
 fig = go.Figure()
-fig.add_bar(x=d["dia"], y=d["asistieron"], name="Asistencias", marker_color=ui.CELESTE, yaxis="y2")
-fig.add_scatter(x=d["dia"], y=d["pct"], name="% asistencia", mode="lines+markers", line=dict(color=ui.NARANJA, width=3))
-fig.update_layout(yaxis=dict(title="% asistencia", tickformat=".0%", range=[0, 1]),
+fig.add_bar(x=d["etiqueta"], y=d["asistieron"], name="Asistencias", marker_color=ui.CELESTE, yaxis="y2")
+fig.add_scatter(x=d["etiqueta"], y=d["pct"], name="% asistencia", mode="lines+markers", line=dict(color=ui.NARANJA, width=3))
+fig.update_layout(xaxis=dict(type="category", title=None),
+                  yaxis=dict(title="% asistencia", tickformat=".0%", range=[0, 1]),
                   yaxis2=dict(title="Asistencias", overlaying="y", side="right", showgrid=False),
                   legend=dict(orientation="h", y=1.12), separators=",.")
 st.plotly_chart(ui.dark_layout(fig, 340), width="stretch")

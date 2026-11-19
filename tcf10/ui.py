@@ -246,6 +246,15 @@ def dark_layout(fig, height: int = 340):
     return fig
 
 
+DIAS_ES = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+
+
+def etiqueta_dia(d) -> str:
+    """«lun 17/11»: etiqueta para ejes que solo muestran los días con sesiones."""
+    d = pd.Timestamp(d)
+    return f"{DIAS_ES[d.weekday()]} {d:%d/%m}"
+
+
 def fecha_corta(d) -> str:
     return "–" if d is None or pd.isna(d) else pd.Timestamp(d).strftime("%d/%m/%Y")
 

@@ -14,8 +14,8 @@ su tope: horas de más en uno no compensan el otro. **Culmina** quien llega al {
 **{ui.num(C.HORAS_CULMINACION)} h válidas**.
 
 **Fuente del avance.** Vistas VTD10 del SIS (BigQuery o su copia en Google Sheets), cruzadas por ID SIS: sincrónicas = sesiones pasadas con
-asistencia × horas por sesión configuradas; asincrónicas = tiempo visto en la plataforma (time_view) sumado por curso,
-para no contar dos veces lecciones y recursos. Se excluyen los usuarios de prueba. La base de beneficiarios, grupos, docentes, retiros,
+asistencia × horas por sesión configuradas; asincrónicas = Horas_Plataforma_Acreditadas: tiempo pedagógico acreditado
+(pedagogical_time de VTD10_student_progress_detail, en segundos ÷ 3.600) sumado por persona; cuenta hasta 58,5 h. Se excluyen los usuarios de prueba. La base de beneficiarios, grupos, docentes, retiros,
 certificación y situación laboral sale del Google Sheet operativo.
 
 **Riesgo (Anexo 8).** Se compara el avance con el esperado a la fecha según el calendario de la cohorte

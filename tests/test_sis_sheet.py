@@ -98,3 +98,25 @@ def test_franja_por_hora_de_inicio_mas_comun():
                             pd.Series(["2026-11-10 08:00:00", "2026-11-12 08:00:00", "2026-11-14 14:00:00",
                                        "2026-11-10 18:30:00"])).set_index("grupo")["franja"]
     assert f["G1"] == "Mañana · 8:00" and f["G2"] == "Noche · 18:30"
+
+
+def test_horas_plataforma_acreditadas_desde_pedagogical_time():
+    c = _crudas()
+    # detalle por lección: 101 tiene dos lecciones (3600 + 5400 s = 2,5 h), 102 una (1800 s), 103 vacío
+    extra = pd.DataFrame({"incremental": [101, 102], "completed_date": "2026-11-11T09:00:00",
+                          "last_updated_statistics": "2026-11-13 05:00:00", "lesson_name": "Lección 2",
+                          "course_name": "Módulo 1"})
+    det = pd.concat([c["prog_det"], extra], ignore_index=True)
+    det["pedagogical_time"] = [3600, 0, "", "5400", 1800]   # filas: 101, 102, 103, 101, 102
+    c["prog_det"] = det
+    t = S.preparar(c)
+    assert S.fuente_plataforma(t) == "pedagogical_time"
+    av = S.avance(t, [101, 102, 103], horas_sesion=3.0, divisor_tiempo=60).set_index("id_sis")
+    assert av.loc[101, "horas_asinc"] == pytest.approx(2.5)   # no usa course_time_view (7200 s) ni el divisor 60
+    assert av.loc[102, "horas_asinc"] == pytest.approx(0.5)
+    assert av.loc[103, "horas_asinc"] == 0
+
+
+def test_sin_pestana_pedagogica_usa_respaldo():
+    t = S.preparar(_crudas())
+    assert S.fuente_plataforma(t) == "course_time_view"

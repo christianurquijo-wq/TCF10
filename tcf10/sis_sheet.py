@@ -21,6 +21,10 @@ PESTANAS = {
     "prog_det": "VTD10_student_progress_detail",
     "prog_cur": "VTD10_student_progress_per_course_summary",
 }
+# Horas_Plataforma_Acreditadas = pedagogical_time (segundos) de VTD10_student_progress_detail / 3600, sumado por
+# persona. Es la fuente oficial de las horas en plataforma (nov-2026); course_time_view queda solo como respaldo si
+# la pestaña de detalle aún no trae esa columna.
+COL_PEDAGOGICO = "pedagogical_time"
 # columnas que se conservan de cada pestaña (las demás, incluidos datos personales, se descartan)
 COLUMNAS = {
     "asis_det": ["incremental", "group_name", "session_id", "session_number", "session_date", "attended",
@@ -35,7 +39,8 @@ COLUMNAS = {
                  "course_completed_status", "lessons_active", "lessons_completed", "course_time_view",
                  "progress_status"],
 }
-OPCIONALES = {"login", "prog_det"}  # sin estas pestañas la app funciona (con menos precisión en «última actividad»)
+OPCIONALES = {"login", "prog_det"}
+SEGUNDOS_POR_HORA = 3600  # sin estas pestañas la app funciona (con menos precisión en «última actividad»)
 
 
 class FaltaEstructura(Exception):
@@ -114,6 +119,10 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     t["franjas"] = (franjas_por_grupo(ad["group_name"], ad["session_start_date"])
                     if ad is not None and {"group_name", "session_start_date"} <= set(ad.columns)
                     else pd.DataFrame(columns=["grupo", "franja"]))
+    det = crudas.get("prog_det")
+    t["prog_ped"] = (det[["incremental", COL_PEDAGOGICO]].copy()
+                     if det is not None and {"incremental", COL_PEDAGOGICO} <= set(det.columns)
+                     else pd.DataFrame(columns=["incremental", COL_PEDAGOGICO]))
     for clave, cols in COLUMNAS.items():
         df = crudas.get(clave)
         if df is None:
@@ -127,7 +136,7 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     b = t["basica"]
     b["iniciales"] = b.pop("user_full_name").map(iniciales)  # el nombre no sale de aquí
     b["id_sis"] = _num(b.pop("user_incremental")).astype("Int64")
-    for k in ("asis_det", "asis_res", "login", "prog_det", "prog_cur"):
+    for k in ("asis_det", "asis_res", "login", "prog_det", "prog_cur", "prog_ped"):
         t[k]["id_sis"] = _num(t[k].pop("incremental")).astype("Int64")
 
     for c in ("session_date", "last_updated_class_session"):
@@ -149,7 +158,28 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         t["prog_cur"][c] = _fecha(t["prog_cur"][c])
     for c in ("course_completed_status", "lessons_active", "lessons_completed", "course_time_view"):
         t["prog_cur"][c] = _num(t["prog_cur"][c])
+    t["prog_ped"][COL_PEDAGOGICO] = _num(t["prog_ped"][COL_PEDAGOGICO])
     return t
+
+
+def horas_plataforma(t: dict[str, pd.DataFrame], ids, divisor_respaldo: float = SEGUNDOS_POR_HORA) -> pd.Series:
+    """Horas_Plataforma_Acreditadas por ID SIS: suma de pedagogical_time (segundos) de VTD10_student_progress_detail
+    / 3600.
+
+    Si esa pestaña aún no trae pedagogical_time, usa el respaldo anterior
+    (course_time_view de la pestaña por curso ÷ divisor_time_view)."""
+    ids = set(int(i) for i in ids)
+    ped = t.get("prog_ped")
+    if ped is not None and len(ped):
+        x = ped[ped["id_sis"].isin(ids)]
+        return (x.groupby("id_sis")[COL_PEDAGOGICO].sum(min_count=1) / SEGUNDOS_POR_HORA).rename("horas_asinc")
+    pc = t["prog_cur"][t["prog_cur"]["id_sis"].isin(ids)]
+    return (pc.groupby("id_sis")["course_time_view"].sum(min_count=1) / divisor_respaldo).rename("horas_asinc")
+
+
+def fuente_plataforma(t: dict[str, pd.DataFrame]) -> str:
+    ped = t.get("prog_ped")
+    return "pedagogical_time" if ped is not None and len(ped) else "course_time_view"
 
 
 # ------------------------------------------------------------------ equivalentes de las consultas
@@ -188,8 +218,7 @@ def avance(t: dict[str, pd.DataFrame], ids, horas_sesion: float, divisor_tiempo:
                                     ultima_asistencia=("last_attendance_date", "max"))
     grupo = (ar.sort_values("total_sessions", ascending=False).dropna(subset=["group_name"])
                .drop_duplicates("id_sis").set_index("id_sis")["group_name"].rename("grupo_sis"))
-    pc = t["prog_cur"][t["prog_cur"]["id_sis"].isin(ids)]
-    asinc = (pc.groupby("id_sis")["course_time_view"].sum(min_count=1) / divisor_tiempo).rename("horas_asinc")
+    asinc = horas_plataforma(t, ids, divisor_tiempo)  # Horas_Plataforma_Acreditadas
     ult_comp = t["prog_det"][t["prog_det"]["id_sis"].isin(ids)].groupby("id_sis")["completed_date"].max()
     ult_login = t["login"][t["login"]["id_sis"].isin(ids)].groupby("id_sis")["log_date"].max()
 

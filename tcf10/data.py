@@ -6,7 +6,8 @@ Carga de datos de TCF10.
                             situación laboral). Pestañas BENEFICIARIOS y COHORTES.
   avance                    Vistas VTD10 del SIS (DVTD_SIS) en BigQuery (queries/avance_sis.sql), cruzadas
                             por ID SIS = incremental: sincrónicas = sesiones asistidas × horas_por_sesion;
-                            asincrónicas = time_view a nivel de curso ÷ divisor_time_view.
+                            asincrónicas = Horas_Plataforma_Acreditadas (pedagogical_time de
+                            VTD10_student_progress_detail ÷ 3600; respaldo: course_time_view).
 
 Si faltan los secrets ([tcf10] y [gcp_service_account]) la app usa los datos de demostración de
 data/demo/ y lo avisa con un banner: sirve para probar sin tocar datos reales.
@@ -154,12 +155,27 @@ def fuente_sis() -> str:
     return "sheet" if _cfg().get("sis_sheet_id") else "bq"
 
 
+def aviso_plataforma() -> str:
+    """Texto de aviso si las horas de plataforma NO salen de Horas_Plataforma_Acreditadas (pedagogical_time)."""
+    if modo() == "demo" or fuente_sis() != "sheet":
+        return ""
+    from tcf10 import sis_sheet
+    try:
+        if sis_sheet.fuente_plataforma(_sis_sheet(_esquema_sis())) == "pedagogical_time":
+            return ""
+    except Exception:  # noqa: BLE001 - el error de lectura ya se muestra en otra parte
+        return ""
+    return ("Las horas en plataforma se están calculando con course_time_view porque la pestaña "
+            "«VTD10_student_progress_detail» del Sheet del SIS no trae la columna pedagogical_time. Agrégala para "
+            "usar Horas_Plataforma_Acreditadas.")
+
+
 def _esquema_sis() -> str:
     """Huella de las columnas que se leen del SIS: si cambian en el código, la caché anterior se descarta sola
     (sin esto, tras un push la app podía seguir con tablas viejas a las que les faltaban columnas)."""
     import hashlib
     from tcf10 import sis_sheet
-    return hashlib.md5(repr(sis_sheet.COLUMNAS).encode()).hexdigest()[:8]
+    return hashlib.md5(repr((sis_sheet.COLUMNAS, sis_sheet.COL_PEDAGOGICO)).encode()).hexdigest()[:8]
 
 
 @st.cache_data(ttl=900, show_spinner="Leyendo los datos del SIS (Google Sheets)…")

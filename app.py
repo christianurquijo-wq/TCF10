@@ -34,4 +34,8 @@ with st.sidebar:
         refrescar()
         st.rerun()
 
+from tcf10 import data  # noqa: E402
+
+if aviso := data.aviso_plataforma():
+    st.warning(aviso, icon=":material/warning:")
 st.navigation(paginas).run()
