@@ -15,7 +15,8 @@ if correo:
 
 # ------------------------------------------------------------------ filtros
 c1, c2, c3, c4 = st.columns([1, 1, 1, 1.1])
-opciones = lambda col, base: sorted(base[col].dropna().astype(str).unique())  # noqa: E731
+opciones = lambda col, base: sorted(base[col].dropna().astype(str).unique(),  # noqa: E731
+                                    key=C.orden_franja if col == "franja" else None)
 coh = c1.multiselect("Cohorte", opciones("cohorte", df), placeholder="Todas", key="cp_coh")
 base = df[df["cohorte"].isin(coh)] if coh else df
 gru = c2.multiselect("Grupo", opciones("grupo", base), placeholder="Todos", key="cp_gru")

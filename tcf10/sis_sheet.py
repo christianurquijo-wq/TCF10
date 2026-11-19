@@ -25,7 +25,7 @@ PESTANAS = {
 # persona. Es la fuente oficial de las horas en plataforma (nov-2026); course_time_view queda solo como respaldo si
 # la pestaña de detalle aún no trae esa columna.
 COL_PEDAGOGICO = "pedagogical_time"
-VERSION = "2026-11-19 avance por lecciones"  # cambia la llave del caché cuando cambia la preparación
+VERSION = "2026-11-19 franjas oficiales"  # cambia la llave del caché cuando cambia la preparación
 # columnas que se conservan de cada pestaña (las demás, incluidos datos personales, se descartan)
 COLUMNAS = {
     "asis_det": ["incremental", "group_name", "session_id", "session_number", "session_date", "attended",
@@ -209,21 +209,23 @@ def fuente_plataforma(t: dict[str, pd.DataFrame]) -> str:
 
 # ------------------------------------------------------------------ equivalentes de las consultas
 def franja_de_hora(h: float) -> str:
-    if pd.isna(h):
-        return "Sin dato"
-    return "Mañana" if h < 12 else ("Tarde" if h < 18 else "Noche")
+    from tcf10 import config as C
+    return "Sin dato" if pd.isna(h) else C.franja_de_hora(h)
 
 
 def franjas_por_grupo(grupos: pd.Series, inicios: pd.Series) -> pd.DataFrame:
-    """«Mañana · 8:00», «Noche · 18:30»… según la hora de inicio más común de las sesiones de cada grupo."""
+    """Franja oficial de cada grupo («Mañana · 8:00 a. m.», «Tarde · 1:00 p. m.», «Noche · 5:00 p. m.»), según la
+    hora de inicio más común de sus sesiones (se asigna la franja oficial más cercana)."""
     ini = _fecha(inicios)
-    df = pd.DataFrame({"grupo": grupos.astype("string"), "hora": ini.dt.strftime("%H:%M"), "h": ini.dt.hour})
+    df = pd.DataFrame({"grupo": grupos.astype("string"), "hora": ini.dt.strftime("%H:%M"),
+                       "h": ini.dt.hour + ini.dt.minute / 60})
     df = df.dropna(subset=["grupo", "hora"])
     if df.empty:
         return pd.DataFrame(columns=["grupo", "franja"])
     moda = df.groupby(["grupo", "hora", "h"]).size().reset_index(name="n").sort_values("n", ascending=False)
     moda = moda.drop_duplicates("grupo")
-    moda["franja"] = [f"{franja_de_hora(h)} · {int(x[:2])}:{x[3:]}" for h, x in zip(moda["h"], moda["hora"])]
+    from tcf10 import config as C
+    moda["franja"] = [C.etiqueta_franja(franja_de_hora(h)) for h in moda["h"]]
     return moda[["grupo", "franja"]].reset_index(drop=True)
 
 

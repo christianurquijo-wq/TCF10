@@ -92,6 +92,8 @@ def limpiar_beneficiarios(crudo: pd.DataFrame) -> pd.DataFrame:
         {"No Formal": "No formal", "Desempleada": "Desempleado"})
     for c in ("cohorte", "perfil", "nivel", "grupo", "docente", "gestor", "franja"):
         df[c] = df[c].fillna("Sin dato").astype(str).str.strip().replace("", "Sin dato")
+    from tcf10 import config as C
+    df["franja"] = df["franja"].map(C.etiqueta_franja)  # «Mañana» → «Mañana · 8:00 a. m.»
     return df.reset_index(drop=True)
 
 

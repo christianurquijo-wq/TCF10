@@ -33,6 +33,28 @@ MAX_ACTIVOS_POR_GRUPO = 35          # máximo de activos por grupo (confirmado c
 MAX_GRUPOS_POR_DOCENTE = 3          # simultáneos, sin cruce de horario
 MIN_GESTORES_POR_DOCENTE = 1
 MIN_FRANJAS = 3
+# Franjas oficiales del programa: (nombre, hora de inicio 0-24, etiqueta). Confirmado nov-2026.
+FRANJAS = [("Mañana", 8, "8:00 a. m."), ("Tarde", 13, "1:00 p. m."), ("Noche", 17, "5:00 p. m.")]
+
+
+def etiqueta_franja(nombre: str) -> str:
+    """«Mañana» → «Mañana · 8:00 a. m.»; deja igual lo que no es una franja conocida (p. ej. «Sin dato»)."""
+    base = str(nombre or "").split("·")[0].strip().capitalize()
+    for n, _, hora in FRANJAS:
+        if base == n:
+            return f"{n} · {hora}"
+    return str(nombre)
+
+
+def orden_franja(etiqueta: str) -> tuple:
+    """Llave para ordenar franjas en el orden del día (Mañana, Tarde, Noche) y lo demás al final."""
+    base = str(etiqueta).split("·")[0].strip()
+    return next((i for i, (n, _, _) in enumerate(FRANJAS) if n == base), len(FRANJAS)), str(etiqueta)
+
+
+def franja_de_hora(h: float) -> str:
+    """Franja oficial más cercana a la hora de inicio (8, 13 o 17 h)."""
+    return min(FRANJAS, key=lambda f: abs(f[1] - h))[0]
 
 # ------------------------------------------------------------------ pagos e índices (Factor 5)
 # Cada índice es "todo o nada": si el alcanzado (redondeado a entero) es >= al ofertado, se paga.

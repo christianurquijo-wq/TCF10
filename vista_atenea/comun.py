@@ -52,7 +52,8 @@ def filtros_banda(df: pd.DataFrame) -> None:
     cols = st.columns(len(FILTROS))
     base = df
     for c, (col, etiqueta) in zip(cols, FILTROS):
-        opciones = sorted(base[col].dropna().astype(str).unique())
+        opciones = sorted(base[col].dropna().astype(str).unique(),
+                          key=C.orden_franja if col == "franja" else None)
         sel = c.multiselect(etiqueta, opciones, key=f"at_{col}", placeholder="Todos")
         if sel:
             base = base[base[col].astype(str).isin(sel)]

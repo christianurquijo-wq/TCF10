@@ -96,8 +96,10 @@ def test_pestana_faltante():
 def test_franja_por_hora_de_inicio_mas_comun():
     f = S.franjas_por_grupo(pd.Series(["G1", "G1", "G1", "G2"]),
                             pd.Series(["2026-11-10 08:00:00", "2026-11-12 08:00:00", "2026-11-14 14:00:00",
-                                       "2026-11-10 18:30:00"])).set_index("grupo")["franja"]
-    assert f["G1"] == "Mañana · 8:00" and f["G2"] == "Noche · 18:30"
+                                       "2026-11-10 17:00:00"])).set_index("grupo")["franja"]
+    assert f["G1"] == "Mañana · 8:00 a. m." and f["G2"] == "Noche · 5:00 p. m."
+    g = S.franjas_por_grupo(pd.Series(["G3"]), pd.Series(["2026-11-10 13:05:00"])).set_index("grupo")["franja"]
+    assert g["G3"] == "Tarde · 1:00 p. m."
 
 
 def test_horas_plataforma_acreditadas_desde_pedagogical_time():
