@@ -36,6 +36,7 @@ with st.sidebar:
 
 from tcf10 import data  # noqa: E402
 
-if aviso := data.aviso_plataforma():
+# getattr: si Streamlit Cloud conserva una versión anterior de tcf10.data en memoria, la app no se cae.
+if aviso := getattr(data, "aviso_plataforma", lambda: "")():
     st.warning(aviso, icon=":material/warning:")
 st.navigation(paginas).run()

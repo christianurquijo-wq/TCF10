@@ -32,7 +32,8 @@ nav = st.navigation(paginas, position="top" if sesion else "hidden")
 if not sesion:
     acceso.pantalla_ingreso()
 acceso.aviso_modo(sesion)
-if aviso := data.aviso_plataforma():
+# getattr: si Streamlit Cloud conserva una versión anterior de tcf10.data en memoria, la app no se cae.
+if aviso := getattr(data, "aviso_plataforma", lambda: "")():
     st.warning(aviso, icon=":material/warning:")
 correo = sesion.get("nombre", "")
 
