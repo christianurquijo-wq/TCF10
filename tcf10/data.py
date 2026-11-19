@@ -201,7 +201,8 @@ def _sis_sheet(esquema: str = "") -> dict[str, pd.DataFrame]:
                               date_time_render_option=DateTimeOption.formatted_string)
         if v:
             ancho = len(v[0])
-            crudas[clave] = pd.DataFrame([(f + [""] * ancho)[:ancho] for f in v[1:]], columns=v[0])
+            crudas[clave] = pd.DataFrame([(f + [""] * ancho)[:ancho] for f in v[1:]],
+                                         columns=[str(c).strip() for c in v[0]])
     try:
         return sis_sheet.preparar(crudas)
     except sis_sheet.FaltaEstructura as e:

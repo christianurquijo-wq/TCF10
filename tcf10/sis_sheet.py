@@ -120,8 +120,12 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
                     if ad is not None and {"group_name", "session_start_date"} <= set(ad.columns)
                     else pd.DataFrame(columns=["grupo", "franja"]))
     det = crudas.get("prog_det")
-    t["prog_ped"] = (det[["incremental", COL_PEDAGOGICO]].copy()
-                     if det is not None and {"incremental", COL_PEDAGOGICO} <= set(det.columns)
+    # Encabezado tolerante: «pedagogical_time», « Pedagogical_Time », «pedagogical time»…
+    col_ped = (next((c for c in det.columns
+                     if re.sub(r"[\s_]+", "_", str(c).strip().lower()) == COL_PEDAGOGICO), None)
+               if det is not None else None)
+    t["prog_ped"] = (det[["incremental", col_ped]].rename(columns={col_ped: COL_PEDAGOGICO}).copy()
+                     if col_ped is not None and "incremental" in det.columns
                      else pd.DataFrame(columns=["incremental", COL_PEDAGOGICO]))
     for clave, cols in COLUMNAS.items():
         df = crudas.get(clave)
