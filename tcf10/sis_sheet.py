@@ -25,6 +25,7 @@ PESTANAS = {
 # persona. Es la fuente oficial de las horas en plataforma (nov-2026); course_time_view queda solo como respaldo si
 # la pestaña de detalle aún no trae esa columna.
 COL_PEDAGOGICO = "pedagogical_time"
+VERSION = "2026-11-19 avance por lecciones"  # cambia la llave del caché cuando cambia la preparación
 # columnas que se conservan de cada pestaña (las demás, incluidos datos personales, se descartan)
 COLUMNAS = {
     "asis_det": ["incremental", "group_name", "session_id", "session_number", "session_date", "attended",
@@ -162,8 +163,28 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         t["prog_cur"][c] = _fecha(t["prog_cur"][c])
     for c in ("course_completed_status", "lessons_active", "lessons_completed", "course_time_view"):
         t["prog_cur"][c] = _num(t["prog_cur"][c])
+    t["prog_cur"] = avance_por_lecciones(t["prog_cur"])
     t["prog_ped"][COL_PEDAGOGICO] = _num(t["prog_ped"][COL_PEDAGOGICO])
     return t
+
+
+def avance_por_lecciones(pc: pd.DataFrame) -> pd.DataFrame:
+    """Avance y estado de cada curso coherentes con las lecciones: completadas ÷ activas.
+
+    nov-2026: course_completed_status del SIS podía marcar 100 % con 36 de 44 lecciones terminadas. Ahora el
+    porcentaje (course_completed_status, 0-100) y progress_status se recalculan con las lecciones cuando
+    lessons_active > 0; si el curso no reporta lecciones activas, se conserva lo que trae el SIS."""
+    pc = pc.copy()
+    act, comp = pc["lessons_active"], pc["lessons_completed"].fillna(0)
+    con_lecciones = act.fillna(0) > 0
+    pct = (comp / act.where(con_lecciones)).clip(0, 1) * 100
+    pc["course_completed_status"] = pct.where(con_lecciones, pc["course_completed_status"].clip(0, 100))
+    original = pc["progress_status"].astype("string").str.strip().str.lower()
+    estado = pd.Series("sin_iniciar", index=pc.index, dtype="object")
+    estado[(comp > 0) | original.isin(["en_progreso", "completado"]).fillna(False)] = "en_progreso"
+    estado[comp >= act] = "completado"
+    pc["progress_status"] = estado.where(con_lecciones, pc["progress_status"])
+    return pc
 
 
 def horas_plataforma(t: dict[str, pd.DataFrame], ids, divisor_respaldo: float = SEGUNDOS_POR_HORA) -> pd.Series:

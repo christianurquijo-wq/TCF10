@@ -175,7 +175,7 @@ def _esquema_sis() -> str:
     (sin esto, tras un push la app podía seguir con tablas viejas a las que les faltaban columnas)."""
     import hashlib
     from tcf10 import sis_sheet
-    return hashlib.md5(repr((sis_sheet.COLUMNAS, sis_sheet.COL_PEDAGOGICO)).encode()).hexdigest()[:8]
+    return hashlib.md5(repr((sis_sheet.COLUMNAS, sis_sheet.COL_PEDAGOGICO, sis_sheet.VERSION)).encode()).hexdigest()[:8]
 
 
 @st.cache_data(ttl=900, show_spinner="Leyendo los datos del SIS (Google Sheets)…")

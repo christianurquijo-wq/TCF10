@@ -120,3 +120,12 @@ def test_horas_plataforma_acreditadas_desde_pedagogical_time():
 def test_sin_pestana_pedagogica_usa_respaldo():
     t = S.preparar(_crudas())
     assert S.fuente_plataforma(t) == "course_time_view"
+
+
+def test_avance_del_curso_coherente_con_lecciones():
+    pc = pd.DataFrame({"course_completed_status": [100, 100, 0, 80], "lessons_active": [44, 44, 10, 0],
+                       "lessons_completed": [36, 44, 0, 0],
+                       "progress_status": ["completado", "completado", "en_progreso", "en_progreso"]})
+    r = S.avance_por_lecciones(pc)
+    assert r["course_completed_status"].round(1).tolist() == [81.8, 100.0, 0.0, 80.0]
+    assert r["progress_status"].tolist() == ["en_progreso", "completado", "en_progreso", "en_progreso"]
