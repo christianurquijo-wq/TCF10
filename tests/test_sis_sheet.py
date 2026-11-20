@@ -148,3 +148,24 @@ def test_pedagogical_time_solo_recursos_completados():
     assert h[101] == pytest.approx(3.0)          # 3600 + 7200 s
     assert h[102] == pytest.approx(600 / 3600)   # la de 1800 s no está completada
     assert h[103] == 0                           # quiz y recurso sin completar no cuentan
+
+
+def test_consulta_por_estudiante_es_la_fuente_principal():
+    c = _crudas()
+    # misma forma que la pestaña «Consulta por estudiante» (BigQuery vinculado); datos sintéticos
+    c["prog_est"] = pd.DataFrame({
+        "incremental": [101, 101, 102, 103], "student_name": ["X Y", "X Y", "Z W", "Q R"],
+        "student_doc": ["111", "111", "222", "333"], "group_name": ["G1", "G1", "G1", "G2"],
+        "horas_plataforma_acreditadas": ["8.333", "1.667", "0.0", ""],
+        "ultima_fecha_completada": ["2026-11-14 16:12:14.000000 UTC", "", "", ""],
+        "ultima_leccion": ["Feedback 4", "", "", ""], "ultimo_curso": ["Nivel Avanzado", "", "", ""],
+        "last_updated_statistics": ["2026-11-19T17:49:49.475000"] * 4})
+    t = S.preparar(c)
+    assert S.fuente_plataforma(t) == "consulta_por_estudiante"
+    assert not {"student_name", "student_doc"} & set(t["prog_est"].columns)   # sin datos personales
+    av = S.avance(t, [101, 102, 103], horas_sesion=3.0, divisor_tiempo=3600).set_index("id_sis")
+    assert av.loc[101, "horas_asinc"] == pytest.approx(10.0)   # suma de sus filas (grupo/materia)
+    assert av.loc[102, "horas_asinc"] == 0 and av.loc[103, "horas_asinc"] == 0
+    # 14/11 16:12 UTC = 11:12 en Bogotá, más reciente que el detalle (10/11)
+    assert S.ultima_leccion(t, 101) == ("Feedback 4", pd.Timestamp("2026-11-14 11:12:14"), "Nivel Avanzado")
+    assert S.ultima_leccion(t, 102)[0] == "Lección 1"           # sin dato en la consulta: usa el detalle

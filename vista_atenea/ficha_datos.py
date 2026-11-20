@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from tcf10 import config as C
-from tcf10 import data
+from tcf10 import data, sis_sheet
 
 ESTADOS_SESION = ["Asistió", "No asistió", "Sin registro", "Programada"]
 
@@ -54,11 +54,7 @@ def detalle(f: pd.Series, hoy: pd.Timestamp) -> dict:
         "completadas": c["lessons_completed"].fillna(0).astype(int), "activas": c["lessons_active"].fillna(0).astype(int),
         "estado": c["progress_status"].map({"completado": "Completado", "en_progreso": "En progreso",
                                             "sin_iniciar": "Sin iniciar"}).fillna("Sin iniciar")})
-    d = t["prog_det"][(t["prog_det"]["id_sis"] == pid) & t["prog_det"]["completed_date"].notna()]
-    ultima = None
-    if len(d):
-        r = d.sort_values("completed_date").iloc[-1]
-        ultima = (str(r.get("lesson_name") or "Lección"), r["completed_date"], str(r.get("course_name") or ""))
+    ultima = sis_sheet.ultima_leccion(t, pid)
     return {"sesiones": sesiones.reset_index(drop=True), "diario": diario.reset_index(), "cursos": cursos,
             "ultima_leccion": ultima}
 

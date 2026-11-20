@@ -25,7 +25,13 @@ PESTANAS = {
 # persona. Es la fuente oficial de las horas en plataforma (nov-2026); course_time_view queda solo como respaldo si
 # la pestaña de detalle aún no trae esa columna.
 COL_PEDAGOGICO = "pedagogical_time"
-VERSION = "2026-11-20 pedagogical_time solo recursos completados"  # cambia la llave del caché cuando cambia la preparación
+# Pestaña con el resultado de BigQuery vinculado (Connected Sheets): una fila por estudiante, grupo y materia, con
+# horas_plataforma_acreditadas ya calculadas (regla de Looker) sobre el 100 % de VTD10_student_progress_detail.
+# Si existe, es la fuente principal de horas en plataforma y de la última lección.
+PESTANA_EST = ("Consulta por estudiante", "VTD10_student_progress_by_student")
+COLUMNAS_EST = ["incremental", "horas_plataforma_acreditadas", "ultima_fecha_completada", "ultima_leccion",
+                "ultimo_curso", "last_updated_statistics"]
+VERSION = "2026-11-20 consulta por estudiante"  # cambia la llave del caché cuando cambia la preparación
 # columnas que se conservan de cada pestaña (las demás, incluidos datos personales, se descartan)
 COLUMNAS = {
     "asis_det": ["incremental", "group_name", "session_id", "session_number", "session_date", "attended",
@@ -108,7 +114,7 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     # Documento → ID SIS para cruzar con la base de Formalización. Se guarda solo la huella (hash) del documento.
     from tcf10.base_atenea import huella
     pares = []
-    for clave in ("asis_res", "prog_cur", "asis_det", "prog_det"):
+    for clave in ("asis_res", "prog_cur", "asis_det", "prog_det", "prog_est"):
         df = crudas.get(clave)
         if df is not None and {"student_doc", "incremental"} <= set(df.columns):
             pares.append(pd.DataFrame({"huella": huella(df["student_doc"]),
@@ -121,6 +127,7 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
                     if ad is not None and {"group_name", "session_start_date"} <= set(ad.columns)
                     else pd.DataFrame(columns=["grupo", "franja"]))
     t["prog_ped"], filtrado = tiempo_pedagogico(crudas.get("prog_det"))
+    t["prog_est"] = por_estudiante(crudas.get("prog_est"))
     t["meta"] = pd.DataFrame({"ped_filtrado": [filtrado]})
     for clave, cols in COLUMNAS.items():
         df = crudas.get(clave)
@@ -205,6 +212,43 @@ def tiempo_pedagogico(det: pd.DataFrame | None) -> tuple[pd.DataFrame, bool]:
     return pd.DataFrame({"incremental": det["incremental"], COL_PEDAGOGICO: seg}), filtrado
 
 
+def por_estudiante(est: pd.DataFrame | None) -> pd.DataFrame:
+    """Pestaña «Consulta por estudiante»: solo las columnas que usa la app (nombre, documento, correo… se descartan)."""
+    cols = ["id_sis", "horas", "ultima_fecha", "ultima_leccion", "ultimo_curso", "actualizado"]
+    if est is None:
+        return pd.DataFrame(columns=cols)
+    origen = {c: _col(est, c) for c in COLUMNAS_EST}
+    if origen["incremental"] is None or origen["horas_plataforma_acreditadas"] is None:
+        return pd.DataFrame(columns=cols)
+    g = lambda c: est[origen[c]] if origen[c] is not None else pd.Series([None] * len(est), index=est.index)  # noqa: E731
+    df = pd.DataFrame({
+        "id_sis": _num(g("incremental")).astype("Int64"),
+        "horas": _num(g("horas_plataforma_acreditadas")).fillna(0),
+        "ultima_fecha": _fecha(g("ultima_fecha_completada")),
+        "ultima_leccion": g("ultima_leccion").astype("string").str.strip().replace("", pd.NA),
+        "ultimo_curso": g("ultimo_curso").astype("string").str.strip().replace("", pd.NA),
+        "actualizado": _fecha(g("last_updated_statistics")),
+    })
+    return df[df["id_sis"].notna()].reset_index(drop=True)
+
+
+def ultima_leccion(t: dict[str, pd.DataFrame], pid: int):
+    """(lección, fecha, curso) más reciente del participante, combinando la consulta por estudiante y el detalle."""
+    cand = []
+    e = t.get("prog_est")
+    if e is not None and len(e):
+        x = e[(e["id_sis"] == pid) & e["ultima_fecha"].notna()]
+        cand += [(r.ultima_fecha, r.ultima_leccion, r.ultimo_curso) for r in x.itertuples()]
+    d = t["prog_det"]
+    x = d[(d["id_sis"] == pid) & d["completed_date"].notna()]
+    cand += [(r["completed_date"], r.get("lesson_name"), r.get("course_name")) for _, r in x.iterrows()]
+    if not cand:
+        return None
+    fecha, leccion, curso = max(cand, key=lambda c: c[0])
+    texto = lambda v: "" if v is None or (not isinstance(v, str) and pd.isna(v)) else str(v)  # noqa: E731
+    return (texto(leccion) or "Lección", fecha, texto(curso))
+
+
 def horas_plataforma(t: dict[str, pd.DataFrame], ids, divisor_respaldo: float = SEGUNDOS_POR_HORA) -> pd.Series:
     """Horas_Plataforma_Acreditadas por ID SIS: suma de pedagogical_time (segundos) de VTD10_student_progress_detail
     en recursos completados (component_category = "resource" e is_completed = TRUE) / 3600.
@@ -212,8 +256,12 @@ def horas_plataforma(t: dict[str, pd.DataFrame], ids, divisor_respaldo: float = 
     Si esa pestaña aún no trae pedagogical_time, usa el respaldo anterior
     (course_time_view de la pestaña por curso ÷ divisor_time_view)."""
     ids = set(int(i) for i in ids)
+    est = t.get("prog_est")
+    if est is not None and len(est):  # 1) consulta por estudiante (BigQuery vinculado, 100 % de los registros)
+        x = est[est["id_sis"].isin(ids)]
+        return x.groupby("id_sis")["horas"].sum(min_count=1).rename("horas_asinc")
     ped = t.get("prog_ped")
-    if ped is not None and len(ped):
+    if ped is not None and len(ped):  # 2) detalle exportado al Sheet
         x = ped[ped["id_sis"].isin(ids)]
         return (x.groupby("id_sis")[COL_PEDAGOGICO].sum(min_count=1) / SEGUNDOS_POR_HORA).rename("horas_asinc")
     pc = t["prog_cur"][t["prog_cur"]["id_sis"].isin(ids)]
@@ -221,6 +269,9 @@ def horas_plataforma(t: dict[str, pd.DataFrame], ids, divisor_respaldo: float = 
 
 
 def fuente_plataforma(t: dict[str, pd.DataFrame]) -> str:
+    est = t.get("prog_est")
+    if est is not None and len(est):
+        return "consulta_por_estudiante"
     ped = t.get("prog_ped")
     if ped is None or not len(ped):
         return "course_time_view"
@@ -253,7 +304,11 @@ def franjas_por_grupo(grupos: pd.Series, inicios: pd.Series) -> pd.DataFrame:
 
 def actualizado(t: dict[str, pd.DataFrame]) -> pd.Timestamp:
     """La fuente más antigua de las que alimentan la app (así no se sobreestima la frescura)."""
-    marcas = [t["asis_det"]["last_updated_class_session"].max(), t["prog_det"]["last_updated_statistics"].max()]
+    progreso = [t["prog_det"]["last_updated_statistics"].max()]
+    if t.get("prog_est") is not None and len(t["prog_est"]):
+        progreso.append(t["prog_est"]["actualizado"].max())
+    progreso = [m for m in progreso if pd.notna(m)]
+    marcas = [t["asis_det"]["last_updated_class_session"].max(), max(progreso) if progreso else pd.NaT]
     marcas = [m for m in marcas if pd.notna(m)]
     return min(marcas) if marcas else pd.NaT
 
@@ -269,6 +324,10 @@ def avance(t: dict[str, pd.DataFrame], ids, horas_sesion: float, divisor_tiempo:
                .drop_duplicates("id_sis").set_index("id_sis")["group_name"].rename("grupo_sis"))
     asinc = horas_plataforma(t, ids, divisor_tiempo)  # Horas_Plataforma_Acreditadas
     ult_comp = t["prog_det"][t["prog_det"]["id_sis"].isin(ids)].groupby("id_sis")["completed_date"].max()
+    est = t.get("prog_est")
+    if est is not None and len(est):
+        ult_est = est[est["id_sis"].isin(ids)].groupby("id_sis")["ultima_fecha"].max()
+        ult_comp = pd.concat([ult_comp, ult_est], axis=1).max(axis=1)
     ult_login = t["login"][t["login"]["id_sis"].isin(ids)].groupby("id_sis")["log_date"].max()
 
     df = pd.concat([asis, grupo, asinc, ult_comp.rename("ultimo_completado"),

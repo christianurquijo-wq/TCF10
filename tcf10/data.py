@@ -166,7 +166,7 @@ def aviso_plataforma() -> str:
         fuente = sis_sheet.fuente_plataforma(_sis_sheet(_esquema_sis()))
     except Exception:  # noqa: BLE001 - el error de lectura ya se muestra en otra parte
         return ""
-    if fuente == "pedagogical_time":
+    if fuente in ("consulta_por_estudiante", "pedagogical_time"):
         return ""
     if fuente == "pedagogical_time_sin_filtro":
         return ("Las horas en plataforma suman todo el pedagogical_time: la pestaña «VTD10_student_progress_detail» "
@@ -200,7 +200,9 @@ def _sis_sheet(esquema: str = "") -> dict[str, pd.DataFrame]:
             f"{st.secrets['gcp_service_account'].get('client_email', 'la cuenta de servicio')}.") from e
     por_plano = {_plano(w.title): w for w in libro.worksheets()}
     crudas = {}
-    for clave, titulo in sis_sheet.PESTANAS.items():
+    titulos = dict(sis_sheet.PESTANAS)
+    titulos["prog_est"] = next((t for t in sis_sheet.PESTANA_EST if _plano(t) in por_plano), sis_sheet.PESTANA_EST[0])
+    for clave, titulo in titulos.items():
         ws = por_plano.get(_plano(titulo))
         if ws is None:
             continue
