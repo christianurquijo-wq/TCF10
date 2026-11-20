@@ -22,7 +22,7 @@ def _cfg_float(nombre: str, defecto: float) -> float:
 
 
 def detalle(f: pd.Series, hoy: pd.Timestamp) -> dict:
-    if data.modo_demo() or data.fuente_sis() != "sheet" or pd.isna(f["id_sis"]) or int(f["id_sis"]) <= 0:
+    if data.modo_demo() or pd.isna(f["id_sis"]) or int(f["id_sis"]) <= 0:
         return _demo(f, hoy) if data.modo_demo() else _vacio()
     t = data._sis_sheet(data._esquema_sis())
     pid = int(f["id_sis"])

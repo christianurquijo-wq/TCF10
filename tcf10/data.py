@@ -160,15 +160,15 @@ def _horas_por_sesion() -> float:
 
 
 def fuente_sis() -> str:
-    """'sheet' si el SIS llega como copia en Google Sheets (sis_sheet_id); 'bq' si se consulta BigQuery."""
-    return "sheet" if _cfg().get("sis_sheet_id") else "bq"
+    """'bq' si [tcf10] trae sis_dataset (BigQuery directo, tiene prioridad); 'sheet' si solo trae sis_sheet_id."""
+    return "bq" if _cfg().get("sis_dataset") else "sheet"
 
 
 def origen_horas() -> str:
     """Texto corto con el origen de las horas (para mostrar en la ficha)."""
     from tcf10 import config as C
     sinc = f"Con docente: {str(C.HORAS_POR_SESION).replace('.0', '')} h por sesión asistida"
-    if modo() == "demo" or fuente_sis() != "sheet":
+    if modo() == "demo":
         return sinc
     from tcf10 import sis_sheet
     try:
@@ -187,7 +187,7 @@ def origen_horas() -> str:
 
 def aviso_plataforma() -> str:
     """Texto de aviso si las horas de plataforma NO salen de Horas_Plataforma_Acreditadas (pedagogical_time)."""
-    if modo() == "demo" or fuente_sis() != "sheet":
+    if modo() == "demo":
         return ""
     from tcf10 import sis_sheet
     try:
@@ -227,12 +227,18 @@ def _esquema_sis() -> str:
     (sin esto, tras un push la app podía seguir con tablas viejas a las que les faltaban columnas)."""
     import hashlib
     from tcf10 import sis_sheet
-    return hashlib.md5(repr((sis_sheet.COLUMNAS, sis_sheet.COL_PEDAGOGICO, sis_sheet.VERSION)).encode()).hexdigest()[:8]
+    return hashlib.md5(repr((sis_sheet.COLUMNAS, sis_sheet.COL_PEDAGOGICO, sis_sheet.VERSION, fuente_sis(),
+                             _cfg().get("sis_dataset"))).encode()).hexdigest()[:8]
 
 
 @st.cache_data(ttl=900, show_spinner="Cargando datos…")
 def _sis_sheet(esquema: str = "") -> dict[str, pd.DataFrame]:
-    """Lee las pestañas VTD10 y devuelve tablas livianas sin datos personales (solo ID SIS e iniciales)."""
+    """Tablas del SIS (vistas VTD10) livianas y sin datos personales (solo ID SIS e iniciales).
+
+    Origen: BigQuery directo si hay `sis_dataset` en [tcf10]; si no, la copia en Google Sheets (`sis_sheet_id`).
+    Ambos caminos entregan las mismas tablas crudas a sis_sheet.preparar(), así que el resto de la app no cambia."""
+    if fuente_sis() == "bq":
+        return _sis_bigquery()
     import gspread
     from gspread.utils import DateTimeOption, ValueRenderOption
     from tcf10 import sis_sheet
@@ -338,9 +344,6 @@ def _base_formalizacion() -> pd.DataFrame:
     """Base de Formalización SIN datos personales (huella del documento, iniciales y columnas del contrato)."""
     from tcf10 import base_atenea
     crudo = _formalizacion_cruda()
-    if fuente_sis() != "sheet":
-        raise ErrorConfiguracion("La base de Formalización se cruza por documento con el SIS en Google Sheets: "
-                                 "configura `sis_sheet_id` en [tcf10].")
     t = _sis_sheet(_esquema_sis())
     mapa = dict(zip(t["docs"]["huella"], t["docs"]["id_sis"].astype(int)))
     try:
@@ -349,43 +352,99 @@ def _base_formalizacion() -> pd.DataFrame:
         raise ErrorConfiguracion(str(e)) from e
 
 
-def _bq(archivo: str, ids: tuple[int, ...] | None = None, **escalares: float) -> pd.DataFrame:
-    """Corre queries/<archivo>.sql con {dataset} reemplazado y parámetros @ids_sis / escalares FLOAT64."""
+def _cliente_bq():
     from google.cloud import bigquery
-    cfg = _cfg()
     creds = _credenciales(["https://www.googleapis.com/auth/bigquery"])
-    cliente = bigquery.Client(credentials=creds, project=cfg.get("bq_project", creds.project_id))
-    sql = (RAIZ / "queries" / f"{archivo}.sql").read_text(encoding="utf-8").replace("{dataset}", cfg["sis_dataset"])
-    params = [] if ids is None else [bigquery.ArrayQueryParameter("ids_sis", "INT64", list(ids))]
-    params += [bigquery.ScalarQueryParameter(k, "FLOAT64", float(v)) for k, v in escalares.items()]
+    return bigquery.Client(credentials=creds, project=_cfg().get("bq_project", creds.project_id))
+
+
+def _consulta(cliente, sql: str, nombre: str) -> pd.DataFrame:
+    """Corre una consulta y devuelve un DataFrame; los errores se muestran en pantalla con una pista."""
     try:
-        return cliente.query(sql, job_config=bigquery.QueryJobConfig(query_parameters=params)).to_dataframe()
+        return cliente.query(sql).to_dataframe(create_bqstorage_client=False)
     except Exception as e:  # noqa: BLE001 -- Streamlit Cloud oculta el mensaje original: se muestra en pantalla
         codigo = getattr(e, "code", None)
+        ds = _cfg().get("sis_dataset", "")
         pista = {
             403: f"La cuenta de servicio no tiene permiso. Necesita «BigQuery Job User» en el proyecto "
-                 f"«{cliente.project}» y «BigQuery Data Viewer» sobre DVTD_SIS, DSTD_SIS y DSGE_SIS.",
-            404: f"No se encontró la vista o el dataset. Revisa `sis_dataset` en los Secrets "
-                 f"(hoy: «{cfg['sis_dataset']}») y la ubicación (región) del dataset.",
+                 f"«{cliente.project}» y «BigQuery Data Viewer» sobre el dataset «{ds}».",
+            404: f"No se encontró la vista o el dataset. Revisa `sis_dataset` en los Secrets (hoy: «{ds}»).",
             400: "La consulta tiene un error (columna o tipo de dato distinto al esperado en la vista).",
         }.get(codigo, "Error al consultar BigQuery.")
         detalle = getattr(e, "message", None) or str(e)
-        raise ErrorConfiguracion(f"{pista}\n\nConsulta: `queries/{archivo}.sql` · Código: {codigo}\n\n"
+        raise ErrorConfiguracion(f"{pista}\n\nConsulta: {nombre} · Código: {codigo}\n\n"
                                  f"Detalle de BigQuery: {detalle[:600]}") from e
 
 
-@st.cache_data(ttl=3600, show_spinner="Cargando datos…")
-def _avance_bigquery(ids: tuple[int, ...]) -> pd.DataFrame:
-    cfg = _cfg()
-    return _bq("avance_sis", ids,
-               horas_sesion=_horas_por_sesion(),
-               # time_view en segundos → 3600; en minutos → 60 (validar con queries/validar_unidades.sql)
-               divisor_tiempo=cfg.get("divisor_time_view", 3600))
+def _como_texto(df: pd.DataFrame) -> pd.DataFrame:
+    """Deja cada valor como texto, igual que llega de Google Sheets: así sis_sheet.preparar() trata las dos fuentes
+    igual (fechas UTC → Bogotá, números, verdadero/falso)."""
+    def t(v):
+        try:
+            if v is None or pd.isna(v):
+                return ""
+        except (TypeError, ValueError):
+            pass
+        return str(v)
+    return pd.DataFrame({c: df[c].astype(object).map(t) for c in df.columns})
 
 
-@st.cache_data(ttl=3600, show_spinner="Cargando datos…")
-def _base_sis() -> pd.DataFrame:
-    return _bq("base_sis")
+# columnas extra que se piden si la vista las tiene (documento para cruzar con Formalización, hora de inicio)
+EXTRAS_BQ = {"asis_det": ["student_doc", "session_start_date"], "asis_res": ["student_doc"],
+             "prog_cur": ["student_doc"], "prog_det": ["student_doc"]}
+
+SQL_POR_ESTUDIANTE = """
+SELECT
+  incremental,
+  ROUND(SUM(IF(LOWER(TRIM(CAST(component_category AS STRING))) = 'resource'
+               AND LOWER(CAST(is_completed AS STRING)) IN ('true', '1'),
+               SAFE_CAST(pedagogical_time AS FLOAT64), 0)) / 3600, 4)            AS horas_plataforma_acreditadas,
+  MAX(completed_date)                                                           AS ultima_fecha_completada,
+  ARRAY_AGG(IF(completed_date IS NULL, NULL, STRUCT(lesson_name, course_name))
+            IGNORE NULLS ORDER BY completed_date DESC LIMIT 1)[SAFE_OFFSET(0)].lesson_name AS ultima_leccion,
+  ARRAY_AGG(IF(completed_date IS NULL, NULL, STRUCT(lesson_name, course_name))
+            IGNORE NULLS ORDER BY completed_date DESC LIMIT 1)[SAFE_OFFSET(0)].course_name AS ultimo_curso,
+  MAX(last_updated_statistics)                                                  AS last_updated_statistics
+FROM `{ds}.VTD10_student_progress_detail`
+WHERE SAFE_CAST(incremental AS INT64) NOT IN ({excl})
+GROUP BY incremental
+"""
+
+
+def _sis_bigquery() -> dict[str, pd.DataFrame]:
+    """Lee las vistas VTD10 directo de BigQuery (solo las columnas que usa la app; sin nombres ni correos salvo el
+    nombre de la vista básica, que se reduce a iniciales en sis_sheet.preparar)."""
+    from tcf10 import config as C
+    from tcf10 import sis_sheet
+    ds = _cfg()["sis_dataset"].strip().strip("`")
+    excl = ", ".join(str(int(x)) for x in C.USUARIOS_PRUEBA) or "-1"
+    cliente = _cliente_bq()
+    vistas = list(sis_sheet.PESTANAS.values())
+    proyecto, dataset = ds.split(".", 1) if "." in ds else (cliente.project, ds)
+    info = _consulta(cliente, f"SELECT table_name, column_name FROM `{proyecto}.{dataset}`.INFORMATION_SCHEMA.COLUMNS "
+                              f"WHERE table_name IN ({', '.join(repr(v) for v in vistas)})", "columnas de las vistas")
+    disponibles = info.groupby("table_name")["column_name"].apply(set).to_dict()
+    crudas = {}
+    for clave, vista in sis_sheet.PESTANAS.items():
+        if vista not in disponibles:
+            continue  # sis_sheet.preparar() avisa si falta una vista obligatoria
+        cols = [c for c in sis_sheet.COLUMNAS[clave] + EXTRAS_BQ.get(clave, []) if c in disponibles[vista]]
+        idc = "user_incremental" if clave == "basica" else "incremental"
+        filtro = f"SAFE_CAST({idc} AS INT64) NOT IN ({excl})"
+        if clave == "prog_det":
+            filtro += " AND completed_date IS NOT NULL"  # solo lecciones terminadas: lo único que se usa
+        sql = f"SELECT {', '.join(f'`{c}`' for c in dict.fromkeys(cols))} FROM `{ds}.{vista}` WHERE {filtro}"
+        crudas[clave] = _como_texto(_consulta(cliente, sql, vista))
+    if "VTD10_student_progress_detail" in disponibles:
+        crudas["prog_est"] = _como_texto(_consulta(cliente, SQL_POR_ESTUDIANTE.format(ds=ds, excl=excl),
+                                                   "horas de plataforma por estudiante"))
+    try:
+        t = sis_sheet.preparar(crudas)
+    except sis_sheet.FaltaEstructura as e:
+        raise ErrorConfiguracion(f"{e} Vistas encontradas en {ds}: {', '.join(sorted(disponibles)) or '(ninguna)'}.") from e
+    t["meta"]["est_pestana"] = "BigQuery"
+    t["meta"]["est_ids"] = int(t["prog_est"]["id_sis"].nunique()) if len(t["prog_est"]) else 0
+    return t
 
 
 def agrupar_cohortes(inicios: pd.Series) -> pd.Series:
@@ -451,12 +510,10 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
         cohortes = limpiar_cohortes(pd.read_csv(DEMO / "cohortes.csv", dtype=str))
         return benef, avance, cohortes, True
     cfg = _cfg()
-    desde_sheet = fuente_sis() == "sheet"
-    if desde_sheet:
-        from tcf10 import sis_sheet
+    from tcf10 import sis_sheet
     if m == "sis":
-        benef, cohortes = base_desde_sis(sis_sheet.base(_sis_sheet(_esquema_sis())) if desde_sheet else _base_sis())
-    elif desde_sheet:
+        benef, cohortes = base_desde_sis(sis_sheet.base(_sis_sheet(_esquema_sis())))
+    elif cfg.get("sheet_id"):
         # Base real: «DB Formalización TCF10» cruzada por documento con el SIS; grupo y fechas salen del SIS.
         from tcf10 import base_atenea
         benef, cohortes = base_atenea.calendario(_base_formalizacion(), sis_sheet.base(_sis_sheet(_esquema_sis())))
@@ -468,12 +525,8 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
         benef = limpiar_beneficiarios(_leer_sheet(cfg.get("pestana_beneficiarios", "BENEFICIARIOS")))
         cohortes = limpiar_cohortes(_leer_sheet(cfg.get("pestana_cohortes", "COHORTES")))
     ids = tuple(int(x) for x in benef["id_sis"].dropna().unique() if int(x) > 0)  # negativos = sin usuario SIS
-    if desde_sheet:
-        avance = limpiar_avance(sis_sheet.avance(_sis_sheet(_esquema_sis()), ids, _horas_por_sesion(),
-                                                 float(cfg.get("divisor_time_view", 3600))))
-    else:
-        avance = limpiar_avance(_avance_bigquery(ids)) if ids else pd.DataFrame(
-        columns=["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis", "actualizado_sis"])
+    avance = limpiar_avance(sis_sheet.avance(_sis_sheet(_esquema_sis()), ids, _horas_por_sesion(),
+                                             float(cfg.get("divisor_time_view", 3600))))
     benef = _completar_grupo(benef, avance)
     return benef, avance, cohortes, False
 
@@ -503,7 +556,7 @@ def identidades() -> pd.DataFrame:
 
 def detalle_persona(id_sis: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """(sesiones, cursos) de una persona para la ficha de la app de Atenea."""
-    if modo_demo() or fuente_sis() != "sheet" or id_sis is None or int(id_sis) <= 0:
+    if modo_demo() or id_sis is None or int(id_sis) <= 0:
         return pd.DataFrame(), pd.DataFrame()
     t = _sis_sheet(_esquema_sis())
     s = t["asis_det"][t["asis_det"]["id_sis"] == int(id_sis)].copy()
@@ -521,20 +574,12 @@ def detalle_persona(id_sis: int) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 # ------------------------------------------------------------------ agregados del SIS (página de asistencia)
-@st.cache_data(ttl=3600, show_spinner="Cargando datos…")
-def _agregados_bigquery(ids: tuple[int, ...]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    return _bq("asistencia_sesiones", ids), _bq("progreso_cursos", ids)
-
-
 def agregados(ids: tuple[int, ...]) -> tuple[pd.DataFrame, pd.DataFrame]:
     """(asistencia por grupo × sesión, progreso por grupo × curso). En demo se generan sintéticos."""
     if modo_demo():
         return _agregados_demo(ids)
-    if fuente_sis() == "sheet":
-        from tcf10 import sis_sheet
-        asis, prog = sis_sheet.agregados(_sis_sheet(_esquema_sis()), ids)
-    else:
-        asis, prog = _agregados_bigquery(ids)
+    from tcf10 import sis_sheet
+    asis, prog = sis_sheet.agregados(_sis_sheet(_esquema_sis()), ids)
     asis["fecha"] = pd.to_datetime(asis["fecha"], errors="coerce")
     return asis, prog
 
@@ -576,6 +621,6 @@ def _completar_grupo(benef: pd.DataFrame, avance: pd.DataFrame) -> pd.DataFrame:
 
 
 def refrescar() -> None:
-    for f in (_leer_sheet, _avance_bigquery, _base_sis, _agregados_bigquery, _sis_sheet, _base_formalizacion,
+    for f in (_leer_sheet, _sis_sheet, _base_formalizacion,
               identidades):
         f.clear()
