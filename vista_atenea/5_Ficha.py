@@ -48,7 +48,7 @@ chips = [(estado, comun.COLOR_ESTADO.get(estado, ui.GRIS))] + [
 st.markdown(
     f"<div class='ficha-cab'><div class='ficha-nombre'>{f['nombre_completo'] or 'Participante'}</div>"
     f"<div class='ficha-datos'>{f['tipo_documento'] or ''} {f['documento'] or ''}"
-    + (f" · ID SIS {int(f['id_sis'])}" if f["id_sis"] > 0 else " · sin usuario en la plataforma") + "</div>"
+    + ("" if f["id_sis"] > 0 else " · sin usuario en la plataforma") + "</div>"
     + "".join(f"<span class='chip' style='background:{c}'>{t}</span>" for t, c in chips) + "</div>",
     unsafe_allow_html=True)
 
@@ -75,8 +75,6 @@ with k[3]:
 with k[4]:
     estilo.kpi("Última actividad", ui.fecha_corta(f.get("ultima_actividad")),
                "sin registros" if pd.isna(dias_sin) else f"hace {int(dias_sin)} días", "celeste")
-
-st.caption(data.origen_horas())
 
 # ------------------------------------------------------------------ trayectoria de horas
 estilo.seccion("Trayectoria de horas")
@@ -105,8 +103,8 @@ else:
     fig.update_layout(yaxis_title="Horas acumuladas", hovermode="x unified", legend=dict(orientation="h", y=1.12),
                       xaxis=dict(range=[inicio, fin if pd.notna(fin) else hoy]), separators=",.")
     st.plotly_chart(ui.dark_layout(fig, 360), width="stretch")
-    st.caption("Sincrónicas: sesiones asistidas con el docente. Asincrónicas: horas acreditadas en la plataforma "
-               "(Horas_Plataforma_Acreditadas), distribuidas según los días de ingreso. La línea punteada es el avance esperado para completar 90 h al cierre.")
+    st.caption("Sincrónicas: sesiones asistidas con el docente. Asincrónicas: horas acreditadas en la plataforma, "
+               "distribuidas según los días de ingreso. La línea punteada es el avance esperado para completar 90 h al cierre.")
 
 # ------------------------------------------------------------------ asistencia sesión por sesión
 izq, der = st.columns([1.35, 1])

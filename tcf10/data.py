@@ -230,7 +230,7 @@ def _esquema_sis() -> str:
     return hashlib.md5(repr((sis_sheet.COLUMNAS, sis_sheet.COL_PEDAGOGICO, sis_sheet.VERSION)).encode()).hexdigest()[:8]
 
 
-@st.cache_data(ttl=900, show_spinner="Leyendo los datos del SIS (Google Sheets)…")
+@st.cache_data(ttl=900, show_spinner="Cargando datos…")
 def _sis_sheet(esquema: str = "") -> dict[str, pd.DataFrame]:
     """Lee las pestañas VTD10 y devuelve tablas livianas sin datos personales (solo ID SIS e iniciales)."""
     import gspread
@@ -289,7 +289,7 @@ def _credenciales(scopes: list[str]):
     return Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=scopes)
 
 
-@st.cache_data(ttl=900, show_spinner="Leyendo la base de beneficiarios…")
+@st.cache_data(ttl=900, show_spinner="Cargando datos…")
 def _leer_sheet(pestana: str) -> pd.DataFrame:
     import gspread
     gc = gspread.authorize(_credenciales(["https://www.googleapis.com/auth/spreadsheets.readonly"]))
@@ -333,7 +333,7 @@ def _formalizacion_cruda() -> pd.DataFrame:
     return base_atenea.a_dataframe(valores)
 
 
-@st.cache_data(ttl=900, show_spinner="Leyendo la base de Formalización…")
+@st.cache_data(ttl=900, show_spinner="Cargando datos…")
 def _base_formalizacion() -> pd.DataFrame:
     """Base de Formalización SIN datos personales (huella del documento, iniciales y columnas del contrato)."""
     from tcf10 import base_atenea
@@ -374,7 +374,7 @@ def _bq(archivo: str, ids: tuple[int, ...] | None = None, **escalares: float) ->
                                  f"Detalle de BigQuery: {detalle[:600]}") from e
 
 
-@st.cache_data(ttl=3600, show_spinner="Consultando el avance en el SIS (BigQuery)…")
+@st.cache_data(ttl=3600, show_spinner="Cargando datos…")
 def _avance_bigquery(ids: tuple[int, ...]) -> pd.DataFrame:
     cfg = _cfg()
     return _bq("avance_sis", ids,
@@ -383,7 +383,7 @@ def _avance_bigquery(ids: tuple[int, ...]) -> pd.DataFrame:
                divisor_tiempo=cfg.get("divisor_time_view", 3600))
 
 
-@st.cache_data(ttl=3600, show_spinner="Leyendo la base de estudiantes del SIS…")
+@st.cache_data(ttl=3600, show_spinner="Cargando datos…")
 def _base_sis() -> pd.DataFrame:
     return _bq("base_sis")
 
@@ -479,7 +479,7 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
 
 
 # ------------------------------------------------------------------ vista Atenea (detrás de login)
-@st.cache_data(ttl=900, show_spinner="Leyendo la base de Formalización…")
+@st.cache_data(ttl=900, show_spinner="Cargando datos…")
 def identidades() -> pd.DataFrame:
     """Nombre completo y documento por huella, SOLO para la app de Atenea (detrás de login con correos de
     Atenea y Kuepa). Atenea es la dueña de la base: aquí no se agrega información que no tenga."""
@@ -521,7 +521,7 @@ def detalle_persona(id_sis: int) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 # ------------------------------------------------------------------ agregados del SIS (página de asistencia)
-@st.cache_data(ttl=3600, show_spinner="Consultando asistencia y avance por curso…")
+@st.cache_data(ttl=3600, show_spinner="Cargando datos…")
 def _agregados_bigquery(ids: tuple[int, ...]) -> tuple[pd.DataFrame, pd.DataFrame]:
     return _bq("asistencia_sesiones", ids), _bq("progreso_cursos", ids)
 

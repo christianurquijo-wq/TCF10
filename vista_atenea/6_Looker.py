@@ -22,6 +22,4 @@ else:
         f"""<iframe src="{url}" style="border:0; width:100%; height:{alto - 10}px; border-radius:14px;"
             allowfullscreen sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin
             allow-popups allow-popups-to-escape-sandbox"></iframe>""", height=alto)
-st.caption("Si el tablero no carga: el informe debe tener activada la inserción (Archivo › Insertar informe) y estar "
-           "compartido con quien lo consulta (o «Cualquier persona con el enlace»). "
-           f"[Abrir en Looker Studio]({url.replace('/embed/', '/')})")
+st.caption(f"[Abrir el tablero en una pestaña nueva]({url.replace('/embed/', '/')})")

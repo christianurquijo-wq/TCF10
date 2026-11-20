@@ -10,7 +10,7 @@ Muestra nombre y documento de los participantes; no muestra montos ni clasificac
 """
 import streamlit as st
 
-from tcf10 import data, ui
+from tcf10 import ui
 from vista_atenea import acceso, comun, estilo
 
 st.set_page_config(page_title="Talento Capital F10 · Atenea", page_icon="assets/atenea_icono.png", layout="wide",
@@ -32,9 +32,6 @@ nav = st.navigation(paginas, position="top" if sesion else "hidden")
 if not sesion:
     acceso.pantalla_ingreso()
 acceso.aviso_modo(sesion)
-# getattr: si Streamlit Cloud conserva una versión anterior de tcf10.data en memoria, la app no se cae.
-if aviso := getattr(data, "aviso_plataforma", lambda: "")():
-    st.warning(aviso, icon=":material/warning:")
 correo = sesion.get("nombre", "")
 
 
