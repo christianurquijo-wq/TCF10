@@ -17,7 +17,19 @@ def toml_str(v: str) -> str:
     return json.dumps(v, ensure_ascii=False)  # comillas dobles y \n escapados: válido en TOML
 
 
+def bloque_bq(ruta: str) -> None:
+    """Imprime la sección [gcp_service_account_bq] para pegarla en los Secrets (cuenta exclusiva de BigQuery)."""
+    sa = json.loads(Path(ruta).read_text(encoding="utf-8"))
+    if sa.get("type") != "service_account":
+        sys.exit("El archivo no es una llave de cuenta de servicio (type != service_account).")
+    print("[gcp_service_account_bq]")
+    for k, v in sa.items():
+        print(f"{k} = {toml_str(v)}")
+
+
 def main() -> None:
+    if "--bq" in sys.argv:  # python scripts/crear_secrets.py --bq cuenta_bigquery.json > bloque_bq.toml
+        return bloque_bq(sys.argv[sys.argv.index("--bq") + 1])
     origen = Path(sys.argv[1] if len(sys.argv) > 1 else RAIZ / "credenciales.json")
     sa = json.loads(origen.read_text(encoding="utf-8"))
     if sa.get("type") != "service_account":

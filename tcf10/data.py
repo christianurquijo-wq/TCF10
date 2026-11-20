@@ -139,7 +139,7 @@ def _cfg() -> dict:
 
 def _hay_sa() -> bool:
     try:
-        return "gcp_service_account" in st.secrets
+        return "gcp_service_account" in st.secrets or "gcp_service_account_bq" in st.secrets
     except Exception:  # noqa: BLE001
         return False
 
@@ -290,9 +290,18 @@ def modo_demo() -> bool:
     return modo() == "demo"
 
 
-def _credenciales(scopes: list[str]):
+def _credenciales(scopes: list[str], seccion: str = "gcp_service_account"):
     from google.oauth2.service_account import Credentials
-    return Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=scopes)
+    return Credentials.from_service_account_info(dict(st.secrets[seccion]), scopes=scopes)
+
+
+def _seccion_bq() -> str:
+    """BigQuery puede usar su propia cuenta de servicio: [gcp_service_account_bq]. Si no existe, usa la general
+    ([gcp_service_account], la que lee los Google Sheets)."""
+    try:
+        return "gcp_service_account_bq" if "gcp_service_account_bq" in st.secrets else "gcp_service_account"
+    except Exception:  # noqa: BLE001
+        return "gcp_service_account"
 
 
 @st.cache_data(ttl=900, show_spinner="Cargando datos…")
@@ -354,8 +363,9 @@ def _base_formalizacion() -> pd.DataFrame:
 
 def _cliente_bq():
     from google.cloud import bigquery
-    creds = _credenciales(["https://www.googleapis.com/auth/bigquery"])
-    return bigquery.Client(credentials=creds, project=_cfg().get("bq_project", creds.project_id))
+    creds = _credenciales(["https://www.googleapis.com/auth/bigquery"], _seccion_bq())
+    # Sin bq_project, las consultas corren (y se cobran) en el proyecto de la propia cuenta de servicio.
+    return bigquery.Client(credentials=creds, project=_cfg().get("bq_project") or creds.project_id)
 
 
 def _consulta(cliente, sql: str, nombre: str) -> pd.DataFrame:
@@ -366,7 +376,7 @@ def _consulta(cliente, sql: str, nombre: str) -> pd.DataFrame:
         codigo = getattr(e, "code", None)
         ds = _cfg().get("sis_dataset", "")
         pista = {
-            403: f"La cuenta de servicio no tiene permiso. Necesita «BigQuery Job User» en el proyecto "
+            403: f"La cuenta de servicio de [{_seccion_bq()}] no tiene permiso. Necesita «BigQuery Job User» en el proyecto "
                  f"«{cliente.project}» y «BigQuery Data Viewer» sobre el dataset «{ds}».",
             404: f"No se encontró la vista o el dataset. Revisa `sis_dataset` en los Secrets (hoy: «{ds}»).",
             400: "La consulta tiene un error (columna o tipo de dato distinto al esperado en la vista).",
