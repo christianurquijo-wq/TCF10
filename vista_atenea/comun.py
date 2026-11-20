@@ -12,9 +12,9 @@ from tcf10 import data
 from tcf10 import ui
 
 FILTROS = [("cohorte", "Cohorte"), ("grupo", "Grupo"), ("franja", "Franja"), ("nivel", "Nivel")]
-ORDEN_ESTADO = ["En formación", "Culminó", "Por iniciar", "Sin usuario en plataforma", "Desistió", "No formalizado"]
+ORDEN_ESTADO = ["En formación", "Culminó", "Por iniciar", "Desistió", "No formalizado"]
 COLOR_ESTADO = {"En formación": ui.AZUL, "Culminó": ui.NOCHE, "Por iniciar": ui.CELESTE,
-                "Sin usuario en plataforma": ui.NARANJA, "Desistió": ui.GRIS, "No formalizado": "#DCE3EA"}
+                "Desistió": ui.GRIS, "No formalizado": "#DCE3EA"}
 
 
 def hoy() -> pd.Timestamp:
@@ -38,8 +38,8 @@ def estado(f: pd.Series) -> str:
         return "No formalizado"
     if f["retirado"]:
         return "Desistió"
-    if f.get("en_sis") in (False,):
-        return "Sin usuario en plataforma"
+    if f.get("en_sis") in (False,):  # formalizado aún sin usuario en la plataforma: se reporta en formación
+        return "En formación"
     if f["culmino"]:
         return "Culminó"
     if not f["cohorte_iniciada"]:

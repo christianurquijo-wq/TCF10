@@ -48,7 +48,7 @@ chips = [(estado, comun.COLOR_ESTADO.get(estado, ui.GRIS))] + [
 st.markdown(
     f"<div class='ficha-cab'><div class='ficha-nombre'>{f['nombre_completo'] or 'Participante'}</div>"
     f"<div class='ficha-datos'>{f['tipo_documento'] or ''} {f['documento'] or ''}"
-    + ("" if f["id_sis"] > 0 else " · sin usuario en la plataforma") + "</div>"
+    + "</div>"
     + "".join(f"<span class='chip' style='background:{c}'>{t}</span>" for t, c in chips) + "</div>",
     unsafe_allow_html=True)
 

@@ -1,4 +1,5 @@
 """Resumen del contrato para Atenea: participantes, estado de formación y metas (sin montos)."""
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -16,9 +17,9 @@ form = df[df["enrolado"]]
 culminaron = int(df["estado_atenea"].eq("Culminó").sum())
 desistieron = int(df["estado_atenea"].eq("Desistió").sum())
 # «En formación» = formalizados que no han culminado ni desistido, para que las tarjetas sumen los formalizados.
-# Incluye a quienes aún no inician su grupo o no tienen usuario en la plataforma, y la nota los detalla.
+# Incluye a quienes aún no inician su grupo (la nota lo detalla).
 en_formacion = len(form) - culminaron - desistieron
-otros = {e: int(form["estado_atenea"].eq(e).sum()) for e in ("Por iniciar", "Sin usuario en plataforma")}
+otros = {e: int(form["estado_atenea"].eq(e).sum()) for e in ("Por iniciar",)}
 detalle = " · ".join(f"{ui.num(n)} {e.lower()}" for e, n in otros.items() if n)
 nota_formacion = "formalizados que aún no culminan" + (f" · incluye {detalle}" if detalle else "")
 asis = comun.asistencia_personas(form)
@@ -62,24 +63,37 @@ for col, (nombre, p, formula) in zip(cols, fichas):
 st.write("")
 estilo.seccion("Participantes por cohorte y estado")
 dist = df.groupby(["cohorte", "estado_atenea"]).size().rename("personas").reset_index()
+totales = df.groupby("cohorte").size()
 fig = px.bar(dist, x="cohorte", y="personas", color="estado_atenea", text="personas",
-             category_orders={"estado_atenea": comun.ORDEN_ESTADO}, color_discrete_map=comun.COLOR_ESTADO,
+             category_orders={"estado_atenea": comun.ORDEN_ESTADO, "cohorte": list(totales.index)},
+             color_discrete_map=comun.COLOR_ESTADO,
              labels={"estado_atenea": "Estado", "cohorte": "", "personas": "Personas"})
-fig.update_traces(texttemplate="%{text:,.0f}", textposition="inside")
-fig.update_layout(separators=",.", legend=dict(orientation="h", y=1.12, title=None))
-st.plotly_chart(ui.dark_layout(fig, 380), width="stretch")
+# Cifra dentro del segmento solo si cabe; el total de cada cohorte va encima de la barra (antes solo se leía
+# el segmento grande y los pequeños —p. ej. culminó— no se veían, así que la barra parecía no cuadrar).
+fig.update_traces(texttemplate="%{text:,.0f}", textposition="inside", insidetextanchor="middle",
+                  hovertemplate="%{x} · %{fullData.name}: %{y:,.0f}<extra></extra>")
+fig.update_layout(uniformtext=dict(minsize=11, mode="hide"), separators=",.",
+                  legend=dict(orientation="h", y=1.14, title=None), yaxis=dict(range=[0, totales.max() * 1.12]))
+for coh, tot in totales.items():
+    fig.add_annotation(x=coh, y=tot, text=f"<b>{ui.num(tot)}</b>", showarrow=False, yshift=12,
+                       font=dict(color=ui.NOCHE, size=13))
+st.plotly_chart(ui.dark_layout(fig, 400), width="stretch")
 
-tabla = (df.assign(asistencia=comun.asistencia_personas(df))
-           .groupby("cohorte").agg(base=("id_sis", "size"), formalizados=("enrolado", "sum"),
-                                   en_formacion=("estado_atenea", lambda s: int(s.eq("En formación").sum())),
-                                   culminaron=("estado_atenea", lambda s: int(s.eq("Culminó").sum())),
-                                   desistieron=("estado_atenea", lambda s: int(s.eq("Desistió").sum())),
-                                   horas=("horas_validas", "mean"), asistencia=("asistencia", "mean"))
-           .reset_index())
-tabla["asistencia"] = tabla["asistencia"] * 100
-st.dataframe(tabla, hide_index=True, width="stretch", column_config={
-    "cohorte": "Cohorte", "base": "Base", "formalizados": "Formalizados", "en_formacion": "En formación",
-    "culminaron": "Culminaron", "desistieron": "Desistieron",
-    "horas": st.column_config.NumberColumn("Horas válidas promedio", format="%.1f"),
-    "asistencia": st.column_config.NumberColumn("Asistencia promedio", format="%.1f %%"),
-})
+# Tabla: cada formalizado está en un solo estado, así que las columnas de estado suman «Formalizados».
+estados = [e for e in ["En formación", "Por iniciar", "Culminó", "Desistió"]
+           if df["estado_atenea"].eq(e).any() or e in ("En formación", "Culminó", "Desistió")]
+t = (df.assign(asistencia=comun.asistencia_personas(df))
+       .groupby("cohorte").agg(base=("id_sis", "size"), formalizados=("enrolado", "sum"),
+                               horas=("horas_validas", "mean"), asistencia=("asistencia", "mean")))
+conteo = pd.crosstab(df["cohorte"], df["estado_atenea"]).reindex(columns=estados, fill_value=0)
+t = t.join(conteo).reset_index()
+nombres = {"En formación": "En formación", "Por iniciar": "Por iniciar", "Culminó": "Culminaron",
+           "Desistió": "Desistieron"}
+tabla = pd.DataFrame({"Cohorte": t["cohorte"], "Base": t["base"].map(ui.num),
+                      "Formalizados": t["formalizados"].map(ui.num)})
+for e in estados:
+    tabla[nombres[e]] = t[e].map(ui.num)
+tabla["Horas válidas promedio"] = [ui.num(h, 1) if f else "–" for h, f in zip(t["horas"], t["formalizados"])]
+tabla["Asistencia promedio"] = t["asistencia"].map(lambda a: ui.pct(a, 1))
+st.dataframe(tabla, hide_index=True, width="stretch")
+st.caption("Cada persona formalizada aparece en un solo estado: las columnas de estado suman «Formalizados».")
