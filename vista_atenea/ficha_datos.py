@@ -26,7 +26,7 @@ def detalle(f: pd.Series, hoy: pd.Timestamp) -> dict:
         return _demo(f, hoy) if data.modo_demo() else _vacio()
     t = data._sis_sheet(data._esquema_sis())
     pid = int(f["id_sis"])
-    horas_sesion = _cfg_float("horas_por_sesion", 3.0)
+    horas_sesion = float(C.HORAS_POR_SESION)
 
     s = t["asis_det"][t["asis_det"]["id_sis"] == pid].copy()
     s["estado"] = np.select([s["attended"] > 0, s["not_attended"] > 0, s["is_past_session"]],

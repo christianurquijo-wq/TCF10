@@ -152,9 +152,37 @@ def modo() -> str:
     return "completo" if cfg.get("sheet_id") else "sis"
 
 
+def _horas_por_sesion() -> float:
+    """4 h por sesión asistida (config.HORAS_POR_SESION). No se lee de los Secrets: allí quedó 3.0 de la configuración
+    inicial y pisaba el valor confirmado."""
+    from tcf10 import config as C
+    return float(C.HORAS_POR_SESION)
+
+
 def fuente_sis() -> str:
     """'sheet' si el SIS llega como copia en Google Sheets (sis_sheet_id); 'bq' si se consulta BigQuery."""
     return "sheet" if _cfg().get("sis_sheet_id") else "bq"
+
+
+def origen_horas() -> str:
+    """Texto corto con el origen de las horas (para mostrar en la ficha)."""
+    from tcf10 import config as C
+    sinc = f"Con docente: {str(C.HORAS_POR_SESION).replace('.0', '')} h por sesión asistida"
+    if modo() == "demo" or fuente_sis() != "sheet":
+        return sinc
+    from tcf10 import sis_sheet
+    try:
+        t = _sis_sheet(_esquema_sis())
+        fuente = sis_sheet.fuente_plataforma(t)
+        m = t["meta"].iloc[0].to_dict()
+    except Exception:  # noqa: BLE001
+        return sinc
+    plat = {"consulta_por_estudiante": f"hoja «{m.get('est_pestana', 'Consulta por estudiante')}» "
+                                       f"(horas_plataforma_acreditadas, {m.get('est_ids', 0)} estudiantes)",
+            "pedagogical_time": "pedagogical_time del detalle (recursos completados)",
+            "pedagogical_time_sin_filtro": "pedagogical_time del detalle (sin filtro)",
+            }.get(fuente, "course_time_view (respaldo)")
+    return f"{sinc} · Plataforma: {plat}"
 
 
 def aviso_plataforma() -> str:
@@ -166,8 +194,25 @@ def aviso_plataforma() -> str:
         fuente = sis_sheet.fuente_plataforma(_sis_sheet(_esquema_sis()))
     except Exception:  # noqa: BLE001 - el error de lectura ya se muestra en otra parte
         return ""
-    if fuente in ("consulta_por_estudiante", "pedagogical_time"):
+    meta = _sis_sheet(_esquema_sis()).get("meta")
+    m = meta.iloc[0].to_dict() if meta is not None and len(meta) else {}
+    if fuente == "consulta_por_estudiante":
+        if m.get("est_tipo") == "DATA_SOURCE" and m.get("est_filas", 0) <= 500:
+            return (f"La pestaña «{m.get('est_pestana')}» es una hoja conectada a BigQuery y por API solo entrega "
+                    f"una vista previa ({m.get('est_filas')} filas). Usa «Extraer» del conector para copiar el "
+                    "resultado a una pestaña normal y dale ese nombre.")
         return ""
+    if m.get("est_pestana"):
+        motivo = (m.get("est_error") or
+                  (f"es una hoja conectada a BigQuery ({m.get('est_tipo')}) y no entregó filas por API"
+                   if m.get("est_tipo") == "DATA_SOURCE" else
+                   f"se leyeron {m.get('est_filas', 0)} filas pero faltan las columnas incremental u "
+                   "horas_plataforma_acreditadas"))
+        return (f"No se pudieron usar las horas de «{m.get('est_pestana')}»: {motivo}. Si es una hoja conectada, "
+                "usa «Extraer» del conector para copiar el resultado a una pestaña normal.")
+    if fuente == "pedagogical_time":
+        return ("No encontré la pestaña «Consulta por estudiante» en el Sheet del SIS; las horas en plataforma se "
+                f"calculan con el detalle exportado (puede estar incompleto). Pestañas: {m.get('pestanas', '')}.")
     if fuente == "pedagogical_time_sin_filtro":
         return ("Las horas en plataforma suman todo el pedagogical_time: la pestaña «VTD10_student_progress_detail» "
                 "no trae component_category o is_completed, así que no se puede limitar a recursos completados "
@@ -202,18 +247,35 @@ def _sis_sheet(esquema: str = "") -> dict[str, pd.DataFrame]:
     crudas = {}
     titulos = dict(sis_sheet.PESTANAS)
     titulos["prog_est"] = next((t for t in sis_sheet.PESTANA_EST if _plano(t) in por_plano), sis_sheet.PESTANA_EST[0])
+    diag = {"est_pestana": "", "est_tipo": "", "est_filas": 0, "est_error": "",
+            "pestanas": " · ".join(w.title for w in libro.worksheets())}
     for clave, titulo in titulos.items():
         ws = por_plano.get(_plano(titulo))
         if ws is None:
             continue
-        v = ws.get_all_values(value_render_option=ValueRenderOption.unformatted,
-                              date_time_render_option=DateTimeOption.formatted_string)
+        if clave == "prog_est":
+            diag["est_pestana"] = ws.title
+            diag["est_tipo"] = str(getattr(ws, "_properties", {}).get("sheetType", ""))
+        try:
+            v = ws.get_all_values(value_render_option=ValueRenderOption.unformatted,
+                                  date_time_render_option=DateTimeOption.formatted_string)
+        except Exception as e:  # noqa: BLE001
+            if clave != "prog_est":
+                raise
+            diag["est_error"] = f"{type(e).__name__}: {str(e)[:200]}"
+            continue
+        if clave == "prog_est":
+            diag["est_filas"] = max(0, len(v) - 1)
         if v:
             ancho = len(v[0])
             crudas[clave] = pd.DataFrame([(f + [""] * ancho)[:ancho] for f in v[1:]],
                                          columns=[str(c).strip() for c in v[0]])
     try:
-        return sis_sheet.preparar(crudas)
+        t = sis_sheet.preparar(crudas)
+        for k, val in diag.items():
+            t["meta"][k] = val
+        t["meta"]["est_ids"] = int(t["prog_est"]["id_sis"].nunique()) if len(t["prog_est"]) else 0
+        return t
     except sis_sheet.FaltaEstructura as e:
         raise ErrorConfiguracion(f"{e} Pestañas encontradas: {', '.join(w.title for w in libro.worksheets())}.") from e
 
@@ -316,7 +378,7 @@ def _bq(archivo: str, ids: tuple[int, ...] | None = None, **escalares: float) ->
 def _avance_bigquery(ids: tuple[int, ...]) -> pd.DataFrame:
     cfg = _cfg()
     return _bq("avance_sis", ids,
-               horas_sesion=cfg.get("horas_por_sesion", 3.0),
+               horas_sesion=_horas_por_sesion(),
                # time_view en segundos → 3600; en minutos → 60 (validar con queries/validar_unidades.sql)
                divisor_tiempo=cfg.get("divisor_time_view", 3600))
 
@@ -407,7 +469,7 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
         cohortes = limpiar_cohortes(_leer_sheet(cfg.get("pestana_cohortes", "COHORTES")))
     ids = tuple(int(x) for x in benef["id_sis"].dropna().unique() if int(x) > 0)  # negativos = sin usuario SIS
     if desde_sheet:
-        avance = limpiar_avance(sis_sheet.avance(_sis_sheet(_esquema_sis()), ids, float(cfg.get("horas_por_sesion", 3.0)),
+        avance = limpiar_avance(sis_sheet.avance(_sis_sheet(_esquema_sis()), ids, _horas_por_sesion(),
                                                  float(cfg.get("divisor_time_view", 3600))))
     else:
         avance = limpiar_avance(_avance_bigquery(ids)) if ids else pd.DataFrame(

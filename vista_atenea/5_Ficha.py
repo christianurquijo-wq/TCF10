@@ -76,6 +76,8 @@ with k[4]:
     estilo.kpi("Última actividad", ui.fecha_corta(f.get("ultima_actividad")),
                "sin registros" if pd.isna(dias_sin) else f"hace {int(dias_sin)} días", "celeste")
 
+st.caption(data.origen_horas())
+
 # ------------------------------------------------------------------ trayectoria de horas
 estilo.seccion("Trayectoria de horas")
 inicio = pd.to_datetime(f.get("fi_grupo") if pd.notna(f.get("fi_grupo", pd.NaT)) else f.get("fecha_inicio"))

@@ -31,7 +31,7 @@ COL_PEDAGOGICO = "pedagogical_time"
 PESTANA_EST = ("Consulta por estudiante", "VTD10_student_progress_by_student")
 COLUMNAS_EST = ["incremental", "horas_plataforma_acreditadas", "ultima_fecha_completada", "ultima_leccion",
                 "ultimo_curso", "last_updated_statistics"]
-VERSION = "2026-11-20 consulta por estudiante"  # cambia la llave del caché cuando cambia la preparación
+VERSION = "2026-11-20 4 h por sesion + diagnostico"  # cambia la llave del caché cuando cambia la preparación
 # columnas que se conservan de cada pestaña (las demás, incluidos datos personales, se descartan)
 COLUMNAS = {
     "asis_det": ["incremental", "group_name", "session_id", "session_number", "session_date", "attended",

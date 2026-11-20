@@ -33,7 +33,6 @@ def main() -> None:
         '# Alternativa con BigQuery (requiere permisos sobre DVTD_SIS, DSTD_SIS y DSGE_SIS):',
         '# sis_dataset = "potent-poetry-284019.DVTD_SIS"',
         f'# bq_project = {toml_str(sa.get("project_id", ""))}',
-        "horas_por_sesion = 3.0",
         "divisor_time_view = 3600",
         "",
         "[gcp_service_account]",
