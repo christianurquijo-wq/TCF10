@@ -112,7 +112,7 @@ def test_horas_plataforma_acreditadas_desde_pedagogical_time():
     det["pedagogical_time"] = [3600, 0, "", "5400", 1800]   # filas: 101, 102, 103, 101, 102
     c["prog_det"] = det
     t = S.preparar(c)
-    assert S.fuente_plataforma(t) == "pedagogical_time"
+    assert S.fuente_plataforma(t) == "pedagogical_time_sin_filtro"  # sin component_category / is_completed
     av = S.avance(t, [101, 102, 103], horas_sesion=3.0, divisor_tiempo=60).set_index("id_sis")
     assert av.loc[101, "horas_asinc"] == pytest.approx(2.5)   # no usa course_time_view (7200 s) ni el divisor 60
     assert av.loc[102, "horas_asinc"] == pytest.approx(0.5)
@@ -131,3 +131,20 @@ def test_avance_del_curso_coherente_con_lecciones():
     r = S.avance_por_lecciones(pc)
     assert r["course_completed_status"].round(1).tolist() == [81.8, 100.0, 0.0, 80.0]
     assert r["progress_status"].tolist() == ["en_progreso", "completado", "en_progreso", "en_progreso"]
+
+
+
+def test_pedagogical_time_solo_recursos_completados():
+    """Regla de Looker Studio: component_category = "resource" AND is_completed = TRUE."""
+    c = _crudas()
+    det = pd.concat([c["prog_det"]] * 2, ignore_index=True)          # 6 filas: 101,102,103,101,102,103
+    det["pedagogical_time"] = [3600, 1800, 900, 7200, 600, 300]
+    det["component_category"] = ["resource", "resource", "quiz", "resource", "Resource ", "resource"]
+    det["is_completed"] = [True, "FALSE", True, "TRUE", 1, ""]
+    c["prog_det"] = det
+    t = S.preparar(c)
+    assert S.fuente_plataforma(t) == "pedagogical_time"
+    h = S.horas_plataforma(t, [101, 102, 103])
+    assert h[101] == pytest.approx(3.0)          # 3600 + 7200 s
+    assert h[102] == pytest.approx(600 / 3600)   # la de 1800 s no está completada
+    assert h[103] == 0                           # quiz y recurso sin completar no cuentan

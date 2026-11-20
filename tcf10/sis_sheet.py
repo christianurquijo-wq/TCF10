@@ -25,7 +25,7 @@ PESTANAS = {
 # persona. Es la fuente oficial de las horas en plataforma (nov-2026); course_time_view queda solo como respaldo si
 # la pestaña de detalle aún no trae esa columna.
 COL_PEDAGOGICO = "pedagogical_time"
-VERSION = "2026-11-19 franjas oficiales"  # cambia la llave del caché cuando cambia la preparación
+VERSION = "2026-11-20 pedagogical_time solo recursos completados"  # cambia la llave del caché cuando cambia la preparación
 # columnas que se conservan de cada pestaña (las demás, incluidos datos personales, se descartan)
 COLUMNAS = {
     "asis_det": ["incremental", "group_name", "session_id", "session_number", "session_date", "attended",
@@ -120,14 +120,8 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     t["franjas"] = (franjas_por_grupo(ad["group_name"], ad["session_start_date"])
                     if ad is not None and {"group_name", "session_start_date"} <= set(ad.columns)
                     else pd.DataFrame(columns=["grupo", "franja"]))
-    det = crudas.get("prog_det")
-    # Encabezado tolerante: «pedagogical_time», « Pedagogical_Time », «pedagogical time»…
-    col_ped = (next((c for c in det.columns
-                     if re.sub(r"[\s_]+", "_", str(c).strip().lower()) == COL_PEDAGOGICO), None)
-               if det is not None else None)
-    t["prog_ped"] = (det[["incremental", col_ped]].rename(columns={col_ped: COL_PEDAGOGICO}).copy()
-                     if col_ped is not None and "incremental" in det.columns
-                     else pd.DataFrame(columns=["incremental", COL_PEDAGOGICO]))
+    t["prog_ped"], filtrado = tiempo_pedagogico(crudas.get("prog_det"))
+    t["meta"] = pd.DataFrame({"ped_filtrado": [filtrado]})
     for clave, cols in COLUMNAS.items():
         df = crudas.get(clave)
         if df is None:
@@ -187,9 +181,33 @@ def avance_por_lecciones(pc: pd.DataFrame) -> pd.DataFrame:
     return pc
 
 
+def _col(df: pd.DataFrame, nombre: str):
+    """Encabezado tolerante: «pedagogical_time», « Pedagogical_Time », «pedagogical time»…"""
+    return next((c for c in df.columns if re.sub(r"[\s_]+", "_", str(c).strip().lower()) == nombre), None)
+
+
+def tiempo_pedagogico(det: pd.DataFrame | None) -> tuple[pd.DataFrame, bool]:
+    """Segundos acreditables por fila de VTD10_student_progress_detail, con la misma regla de Looker Studio:
+
+        CASE WHEN component_category = "resource" AND is_completed = TRUE THEN pedagogical_time / 3600 ELSE 0 END
+
+    Devuelve (incremental, pedagogical_time en segundos ya filtrado) y si se pudo aplicar el filtro (False si la
+    pestaña no trae component_category o is_completed: entonces se suma todo el pedagogical_time y la app avisa)."""
+    vacio = pd.DataFrame(columns=["incremental", COL_PEDAGOGICO])
+    if det is None or "incremental" not in det.columns or _col(det, COL_PEDAGOGICO) is None:
+        return vacio, False
+    seg = _num(det[_col(det, COL_PEDAGOGICO)]).fillna(0)
+    c_cat, c_comp = _col(det, "component_category"), _col(det, "is_completed")
+    filtrado = c_cat is not None and c_comp is not None
+    if filtrado:
+        acreditable = det[c_cat].astype(str).str.strip().str.lower().eq("resource") & _bool(det[c_comp])
+        seg = seg.where(acreditable, 0)
+    return pd.DataFrame({"incremental": det["incremental"], COL_PEDAGOGICO: seg}), filtrado
+
+
 def horas_plataforma(t: dict[str, pd.DataFrame], ids, divisor_respaldo: float = SEGUNDOS_POR_HORA) -> pd.Series:
     """Horas_Plataforma_Acreditadas por ID SIS: suma de pedagogical_time (segundos) de VTD10_student_progress_detail
-    / 3600.
+    en recursos completados (component_category = "resource" e is_completed = TRUE) / 3600.
 
     Si esa pestaña aún no trae pedagogical_time, usa el respaldo anterior
     (course_time_view de la pestaña por curso ÷ divisor_time_view)."""
@@ -204,7 +222,11 @@ def horas_plataforma(t: dict[str, pd.DataFrame], ids, divisor_respaldo: float = 
 
 def fuente_plataforma(t: dict[str, pd.DataFrame]) -> str:
     ped = t.get("prog_ped")
-    return "pedagogical_time" if ped is not None and len(ped) else "course_time_view"
+    if ped is None or not len(ped):
+        return "course_time_view"
+    meta = t.get("meta")
+    filtrado = bool(meta["ped_filtrado"].iloc[0]) if meta is not None and len(meta) else False
+    return "pedagogical_time" if filtrado else "pedagogical_time_sin_filtro"
 
 
 # ------------------------------------------------------------------ equivalentes de las consultas

@@ -163,10 +163,15 @@ def aviso_plataforma() -> str:
         return ""
     from tcf10 import sis_sheet
     try:
-        if sis_sheet.fuente_plataforma(_sis_sheet(_esquema_sis())) == "pedagogical_time":
-            return ""
+        fuente = sis_sheet.fuente_plataforma(_sis_sheet(_esquema_sis()))
     except Exception:  # noqa: BLE001 - el error de lectura ya se muestra en otra parte
         return ""
+    if fuente == "pedagogical_time":
+        return ""
+    if fuente == "pedagogical_time_sin_filtro":
+        return ("Las horas en plataforma suman todo el pedagogical_time: la pestaña «VTD10_student_progress_detail» "
+                "no trae component_category o is_completed, así que no se puede limitar a recursos completados "
+                "(regla de Looker Studio). Agrega esas dos columnas al Sheet.")
     return ("Las horas en plataforma se están calculando con course_time_view porque la pestaña "
             "«VTD10_student_progress_detail» del Sheet del SIS no trae la columna pedagogical_time. Agrégala para "
             "usar Horas_Plataforma_Acreditadas.")
