@@ -16,7 +16,7 @@ from tcf10 import config as C
 NIVELES_RIESGO = ["Alto", "Medio", "Bajo"]
 # Cambia cuando cambian las columnas que calcula preparar(): forma parte de la llave del caché de ui._preparado, así
 # un despliegue nuevo no reutiliza tablas viejas (nov-2026: «KeyError: 'critico'» tras agregar la tipificación).
-VERSION = "2026-11-24 tipificacion"
+VERSION = "2026-11-24 feedbacks"
 
 
 def _n(x) -> str:
@@ -343,4 +343,48 @@ def tipificar(df: pd.DataFrame, hoy: pd.Timestamp) -> pd.DataFrame:
                 partes.append(f"{int(f['dias_sin_plataforma'])} días sin entrar a la plataforma")
         return "; ".join(partes)
     df["motivo_critico"] = df.apply(motivo, axis=1) if len(df) else pd.Series(dtype=str)
+    return df
+
+
+def feedback(df: pd.DataFrame, fb: pd.DataFrame, asis: pd.DataFrame, hoy: pd.Timestamp) -> pd.DataFrame:
+    """Seguimiento de Feedbacks: un Feedback por clase dictada al grupo (máximo C.FEEDBACKS_TOTAL).
+
+    fb: Feedbacks completados (id_sis, n). asis: sesiones por grupo (grupo, session_id, fecha) de data.agregados.
+    Meta del grupo = clases dictadas antes de hoy (la de hoy todavía no se exige). Columnas nuevas: fb_1…fb_8,
+    feedbacks_hechos, feedbacks_meta, feedbacks_atraso, estado_feedback, critico_feedback; además suma el atraso de
+    C.FEEDBACK_ATRASO_CRITICO o más a «critico» y a «motivo_critico».
+    """
+    df = df.copy()
+    tot = C.FEEDBACKS_TOTAL
+    hechos_por_id: dict[int, set] = {}
+    for i, n in zip(fb["id_sis"], fb["n"]):
+        if pd.notna(i):
+            hechos_por_id.setdefault(int(i), set()).add(int(n))
+    ids = [int(i) if pd.notna(i) else None for i in df["id_sis"]]
+    for n in range(1, tot + 1):
+        df[f"fb_{n}"] = [i is not None and n in hechos_por_id.get(i, ()) for i in ids]
+    df["feedbacks_hechos"] = df[[f"fb_{n}" for n in range(1, tot + 1)]].sum(axis=1).astype(int)
+
+    a = asis.copy()
+    a["fecha"] = pd.to_datetime(a["fecha"], errors="coerce")
+    clases = (a[a["fecha"] < pd.Timestamp(hoy).normalize()].groupby("grupo")["session_id"].nunique()
+              .clip(upper=tot).to_dict())
+    activo = df["enrolado"] & ~df["retirado"] & df["cohorte_iniciada"]
+    meta = [float(clases.get(str(g), 0)) if ok else np.nan for g, ok in zip(df["grupo"].astype(str), activo)]
+    df["feedbacks_meta"] = pd.Series(meta, index=df.index)
+    df["feedbacks_atraso"] = (df["feedbacks_meta"] - df["feedbacks_hechos"]).clip(lower=0)
+    at = df["feedbacks_atraso"]
+    df["estado_feedback"] = np.select(
+        [df["feedbacks_meta"].isna(), df["feedbacks_meta"].eq(0), at.eq(0), at.eq(1), at.eq(2)],
+        [None, "Aún no aplica", "Al día", "1 pendiente", "2 pendientes"], default="3 o más pendientes")
+    df.loc[df["feedbacks_meta"].isna(), "estado_feedback"] = None
+    hay_datos = len(fb) > 0
+    en_curso = activo & ~df["culmino"] & ~df["cohorte_cerrada"]
+    df["critico_feedback"] = hay_datos & en_curso & (at >= C.FEEDBACK_ATRASO_CRITICO)
+    if "critico" in df:
+        df["critico"] = df["critico"] | df["critico_feedback"]
+        extra = [f"{int(p)} feedbacks pendientes (lleva {h} de {int(m)})" if c else ""
+                 for c, p, h, m in zip(df["critico_feedback"], at.fillna(0), df["feedbacks_hechos"],
+                                       df["feedbacks_meta"].fillna(0))]
+        df["motivo_critico"] = ["; ".join(x for x in (m, e) if x) for m, e in zip(df["motivo_critico"].fillna(""), extra)]
     return df

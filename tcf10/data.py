@@ -435,6 +435,20 @@ GROUP BY incremental
 """
 
 
+# Feedbacks 1-8 por estudiante (seguimiento de feedbacks, vista interna). Una fila por estudiante y Feedback.
+SQL_FEEDBACK = """
+SELECT
+  incremental,
+  TRIM(component_name)                                                          AS feedback,
+  LOGICAL_OR(LOWER(CAST(is_completed AS STRING)) IN ('true', '1'))              AS completado,
+  MIN(IF(LOWER(CAST(is_completed AS STRING)) IN ('true', '1'), completed_date, NULL)) AS fecha
+FROM `{ds}.VTD10_student_progress_detail`
+WHERE SAFE_CAST(incremental AS INT64) NOT IN ({excl})
+  AND TRIM(component_name) IN ({nombres})
+GROUP BY incremental, feedback
+"""
+
+
 def _sis_bigquery() -> dict[str, pd.DataFrame]:
     """Lee las vistas VTD10 directo de BigQuery (solo las columnas que usa la app; sin nombres ni correos salvo el
     nombre de la vista básica, que se reduce a iniciales en sis_sheet.preparar)."""
@@ -461,6 +475,9 @@ def _sis_bigquery() -> dict[str, pd.DataFrame]:
                             f"WHERE {filtro}", vista)
     if "VTD10_student_progress_detail" in disponibles:
         consultas["prog_est"] = (SQL_POR_ESTUDIANTE.format(ds=ds, excl=excl), "horas de plataforma por estudiante")
+        if {"component_name", "is_completed"} <= disponibles["VTD10_student_progress_detail"]:
+            nombres = ", ".join(f"'Feedback {i}'" for i in range(1, C.FEEDBACKS_TOTAL + 1))
+            consultas["feedback"] = (SQL_FEEDBACK.format(ds=ds, excl=excl, nombres=nombres), "feedbacks por estudiante")
     # nov-2026: las 7 consultas corrían una tras otra; en paralelo la carga tarda lo que la más lenta.
     from concurrent.futures import ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=len(consultas) or 1) as ex:
@@ -470,6 +487,7 @@ def _sis_bigquery() -> dict[str, pd.DataFrame]:
         t = sis_sheet.preparar(crudas)
     except sis_sheet.FaltaEstructura as e:
         raise ErrorConfiguracion(f"{e} Vistas encontradas en {ds}: {', '.join(sorted(disponibles)) or '(ninguna)'}.") from e
+    t["feedback"] = sis_sheet.feedbacks(crudas.get("feedback"))
     t["meta"]["est_pestana"] = "BigQuery"
     t["meta"]["est_ids"] = int(t["prog_est"]["id_sis"].nunique()) if len(t["prog_est"]) else 0
     return t
@@ -638,6 +656,30 @@ def _agregados_demo(ids: tuple[int, ...]) -> tuple[pd.DataFrame, pd.DataFrame]:
                             "en_progreso": prog, "sin_iniciar": n - comp - prog,
                             "avance_promedio": (comp + prog * .4) / n, "pct_lecciones": (comp + prog * .4) / n})
     return pd.DataFrame(filas_a), pd.DataFrame(filas_p)
+
+
+def feedbacks() -> pd.DataFrame:
+    """Feedbacks completados (id_sis, n, fecha). Vacío si la fuente no los trae (solo BigQuery los lee)."""
+    from tcf10 import sis_sheet
+    if modo_demo():
+        return _feedbacks_demo()
+    t = _sis_sheet(_esquema_sis())
+    return t.get("feedback", sis_sheet.feedbacks(None))
+
+
+def _feedbacks_demo() -> pd.DataFrame:
+    import numpy as np
+    rng = np.random.default_rng(8)
+    benef = limpiar_beneficiarios(pd.read_csv(DEMO / "beneficiarios.csv", dtype=str))
+    filas = []
+    for i in benef.loc[benef["enrolado"], "id_sis"].dropna():
+        constancia = rng.choice([.15, .5, .8, .95], p=[.15, .25, .3, .3])
+        for n in range(1, 9):
+            if rng.random() < constancia - n * .03:
+                filas.append({"id_sis": int(i), "n": n, "fecha": pd.Timestamp("2026-10-01") + pd.Timedelta(days=4 * n)})
+    out = pd.DataFrame(filas, columns=["id_sis", "n", "fecha"])
+    out["id_sis"] = out["id_sis"].astype("Int64")
+    return out
 
 
 def _completar_grupo(benef: pd.DataFrame, avance: pd.DataFrame) -> pd.DataFrame:

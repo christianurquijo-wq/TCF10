@@ -153,3 +153,26 @@ def test_vista_interna_solo_para_correos_listados(monkeypatch):
     assert not acceso.es_interno({"nombre": "otra@kuepa.com", "via": "google"})
     assert not acceso.es_interno({"nombre": "christian.urquijo@kuepa.com", "via": "usuario"})
     assert not acceso.es_interno(None)
+
+
+def test_feedback_meta_por_clase_y_critico():
+    import pandas as pd
+    from tcf10 import metrics as M
+    from tcf10 import sis_sheet as S
+    hoy = pd.Timestamp("2026-11-20")
+    df = pd.DataFrame({"id_sis": pd.array([1, 2, 3, 4], dtype="Int64"), "grupo": ["G1", "G1", "G2", "G1"],
+                       "enrolado": True, "retirado": [False, False, False, True], "cohorte_iniciada": True,
+                       "culmino": False, "cohorte_cerrada": False, "critico": False, "motivo_critico": ""})
+    # G1: 4 clases antes de hoy + 1 hoy (no cuenta) · G2: ninguna todavía
+    asis = pd.DataFrame({"grupo": ["G1"] * 5, "session_id": list("abcde"),
+                         "fecha": pd.to_datetime(["2026-11-10", "2026-11-12", "2026-11-14", "2026-11-17", "2026-11-20"])})
+    crudo = pd.DataFrame({"incremental": ["1", "1", "1", "2", "2"],
+                          "feedback": ["Feedback 1", "Feedback 2", "Feedback 3", "Feedback 1", "Feedback 2"],
+                          "completado": ["true", "true", "true", "true", "false"], "fecha": ""})
+    r = M.feedback(df, S.feedbacks(crudo), asis, hoy).set_index("id_sis")
+    assert r.loc[1, "feedbacks_meta"] == 4 and r.loc[1, "feedbacks_hechos"] == 3 and r.loc[1, "estado_feedback"] == "1 pendiente"
+    assert r.loc[2, "feedbacks_hechos"] == 1 and r.loc[2, "feedbacks_atraso"] == 3
+    assert r.loc[2, "estado_feedback"] == "3 o más pendientes" and r.loc[2, "critico"]
+    assert "3 feedbacks pendientes (lleva 1 de 4)" in r.loc[2, "motivo_critico"]
+    assert not r.loc[1, "critico"] and r.loc[3, "estado_feedback"] == "Aún no aplica"
+    assert pd.isna(r.loc[4, "feedbacks_meta"]) and not r.loc[4, "critico"]  # retirado: fuera del seguimiento

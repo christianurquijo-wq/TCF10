@@ -42,6 +42,13 @@ MIN_FRANJAS = 3
 # El SIS guarda la hora de inicio de las sesiones (session_start_date) 5 horas atrás de la hora real de clase
 # (confirmado nov-2026): hora real = hora de BigQuery + 5. Solo afecta la franja de cada grupo.
 DESFASE_HORA_SIS = 5
+
+# ------------------------------------------------------------------ feedbacks
+# Componentes «Feedback 1» … «Feedback 8» de VTD10_student_progress_detail (is_completed = TRUE). Meta: un Feedback
+# por clase dictada al grupo (las clases de días anteriores; la de hoy aún no cuenta), hasta 8.
+FEEDBACKS_TOTAL = 8
+FEEDBACK_ATRASO_CRITICO = 2   # pendientes a partir de los cuales el estudiante pasa a «caso crítico»
+ESTADOS_FEEDBACK = ["3 o más pendientes", "2 pendientes", "1 pendiente", "Al día", "Aún no aplica"]
 FRANJAS = [("Mañana", 8, "8:00 a. m."), ("Tarde", 13, "1:00 p. m."), ("Noche", 17, "5:00 p. m.")]
 
 

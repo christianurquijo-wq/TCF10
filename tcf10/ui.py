@@ -198,7 +198,14 @@ def iniciales(nombre: str) -> str:
 @st.cache_data(ttl=data.TTL, show_spinner="Cargando datos…")
 def _preparado(hoy: pd.Timestamp, version: str = "") -> tuple[pd.DataFrame, bool]:  # version: solo llave del caché
     benef, avance, cohortes, demo = data.cargar()
-    return metrics.preparar(benef, avance, cohortes, hoy), demo
+    df = metrics.preparar(benef, avance, cohortes, hoy)
+    try:  # seguimiento de Feedbacks (vista interna); si la fuente no los trae, la página lo avisa
+        ids = tuple(sorted(int(x) for x in df["id_sis"].dropna().unique() if int(x) > 0))
+        asis, _ = data.agregados(ids)
+        df = metrics.feedback(df, data.feedbacks(), asis, hoy)
+    except Exception as e:  # noqa: BLE001 -- los Feedbacks nunca deben tumbar el resto del tablero
+        df.attrs["feedback_error"] = f"{type(e).__name__}: {e}"
+    return df, demo
 
 
 def datos() -> pd.DataFrame:
@@ -256,7 +263,8 @@ def dark_layout(fig, height: int = 340):
 
 # ------------------------------------------------------------------ gráficas que filtran (vista interna)
 ETIQUETAS_FILTRO = {"grupo": "Grupo", "riesgo": "Riesgo", "cohorte": "Cohorte", "tipo_ruta": "Ruta al 70 %",
-                    "curso": "Curso", "periodo": "Fecha", "docente": "Docente", "franja": "Franja"}
+                    "curso": "Curso", "periodo": "Fecha", "docente": "Docente", "franja": "Franja",
+                    "feedbacks_hechos": "Feedbacks completados", "estado_feedback": "Estado de Feedbacks"}
 
 
 def _clave_filtros(pagina: str) -> str:

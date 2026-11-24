@@ -31,6 +31,7 @@ PAGINAS_ATENEA = [
 PAGINAS_INTERNAS = [
     st.Page("tablero/6_Grupos_criticos.py", title="Grupos y casos críticos", icon=":material/crisis_alert:",
             default=True, url_path="interno-criticos"),
+    st.Page("tablero/7_Feedbacks.py", title="Feedbacks", icon=":material/rate_review:", url_path="interno-feedbacks"),
     st.Page("tablero/1_Metas_y_pagos.py", title="Metas y pagos", icon=":material/payments:", url_path="interno-metas"),
     st.Page("tablero/2_Avance_y_riesgo.py", title="Avance y riesgo", icon=":material/monitoring:",
             url_path="interno-avance"),

@@ -2,7 +2,8 @@
 
 Caso crítico (solo grupos en curso):
   * sin uso de plataforma: 0 h acreditadas con el grupo iniciado hace 7+ días, o 7+ días sin entrar a la plataforma;
-  * no alcanza el 70 %: le faltan más clases de las que quedan en su grupo para llegar a 63 h con la plataforma al 100 %.
+  * no alcanza el 70 %: le faltan más clases de las que quedan en su grupo para llegar a 63 h con la plataforma al 100 %;
+  * atrasado en Feedbacks: 2 o más Feedbacks pendientes frente a uno por clase dictada (metrics.feedback).
 Tipificación (metrics.tipificar): Solo plataforma (≥ 2 clases) · 1 clase + plataforma · 2 clases + plataforma ·
 No alcanza · Ya aprobó, con las horas que le faltan.
 """
@@ -39,10 +40,15 @@ if form.empty:
 # Esperado a la fecha en plataforma (proporcional al calendario del grupo)
 form["plat_esperada"] = form["avance_esperado_h"] / C.HORAS_TOTALES * C.HORAS_ASINCRONICAS
 form["con_actividad"] = form["horas_asinc"] > 0
+form["fb_crit"] = form["critico_feedback"] if "critico_feedback" in form else False
+# motivo principal de cada crítico, para apilar sin contar dos veces: plataforma > no alcanza > Feedbacks
+form["solo_no_alcanza"] = form["critico"] & ~form["sin_plataforma"] & form["no_alcanza"]
+form["solo_feedback"] = form["critico"] & ~form["sin_plataforma"] & ~form["no_alcanza"] & form["fb_crit"]
 
 # ------------------------------------------------------------------ indicadores
 crit = en_curso[en_curso["critico"]]
-c = st.columns(4)
+fb_crit = en_curso["critico_feedback"] if "critico_feedback" in en_curso else pd.Series(False, index=en_curso.index)
+c = st.columns(5)
 with c[0]:
     ui.tarjeta("En formación", ui.num(len(en_curso)), "grupos en curso, sin culminar", ui.AZUL)
 with c[1]:
@@ -54,6 +60,9 @@ with c[2]:
 with c[3]:
     ui.tarjeta("No alcanzan el 70 %", ui.num(int((en_curso["no_alcanza"]).sum())),
                "les faltan más clases de las que quedan", ui.ROJO)
+with c[4]:
+    ui.tarjeta("Atrasados en Feedbacks", ui.num(int(fb_crit.sum())),
+               f"{C.FEEDBACK_ATRASO_CRITICO} o más Feedbacks pendientes", ui.NARANJA_CLARO)
 
 # ------------------------------------------------------------------ tipificación
 st.write("")
@@ -76,7 +85,9 @@ grupos = (form.groupby("grupo")
                asistidas=("sesiones_asistidas", "sum"), registradas=("sesiones_registradas", "sum"),
                horas_plat=("horas_asinc_val", "mean"), esperada=("plat_esperada", "mean"),
                con_actividad=("con_actividad", "mean"), criticos=("critico", "sum"),
-               sin_plat=("sin_plataforma", "sum"), no_alcanza=("no_alcanza", "sum"))
+               sin_plat=("sin_plataforma", "sum"), no_alcanza=("no_alcanza", "sum"),
+               solo_no_alcanza=("solo_no_alcanza", "sum"), solo_feedback=("solo_feedback", "sum"),
+               fb_atrasados=("fb_crit", "sum"))
           .reset_index())
 grupos["asistencia"] = grupos["asistidas"] / grupos["registradas"].where(grupos["registradas"] > 0)
 grupos["pct_criticos"] = grupos["criticos"] / grupos["estudiantes"]
@@ -89,8 +100,9 @@ with der:
         st.success("Ningún grupo tiene casos críticos con este filtro.", icon=":material/check_circle:")
     fig = go.Figure()
     fig.add_bar(y=top["grupo"], x=top["sin_plat"], name="Sin plataforma", orientation="h", marker_color=ui.NARANJA)
-    fig.add_bar(y=top["grupo"], x=(top["criticos"] - top["sin_plat"]).clip(lower=0), name="Solo no alcanza",
-                orientation="h", marker_color=ui.ROJO)
+    fig.add_bar(y=top["grupo"], x=top["solo_no_alcanza"], name="No alcanza", orientation="h", marker_color=ui.ROJO)
+    fig.add_bar(y=top["grupo"], x=top["solo_feedback"], name="Solo Feedbacks", orientation="h",
+                marker_color="#F5A54A")
     fig.update_layout(barmode="stack", xaxis_title="Estudiantes críticos", yaxis_title=None, separators=",.",
                       legend=dict(orientation="h", y=1.12))
     if not top.empty:
@@ -103,13 +115,14 @@ vista = grupos.assign(asistencia=grupos["asistencia"] * 100, con_actividad=grupo
                       pct_criticos=grupos["pct_criticos"] * 100, vs_esperado=grupos["vs_esperado"] * 100)
 st.dataframe(
     vista[["grupo", "franja", "docente", "estudiantes", "criticos", "pct_criticos", "sin_plat", "no_alcanza",
-           "asistencia", "horas_plat", "esperada", "vs_esperado", "con_actividad"]],
+           "fb_atrasados", "asistencia", "horas_plat", "esperada", "vs_esperado", "con_actividad"]],
     hide_index=True, width="stretch", height=min(560, 38 + 35 * len(vista)), column_config={
         "grupo": "Grupo", "franja": "Franja", "docente": "Docente", "estudiantes": "Estudiantes",
         "criticos": st.column_config.NumberColumn("Críticos", format="%d"),
         "pct_criticos": st.column_config.ProgressColumn("% críticos", format="%.0f %%", min_value=0, max_value=100),
         "sin_plat": st.column_config.NumberColumn("Sin plataforma", format="%d"),
         "no_alcanza": st.column_config.NumberColumn("No alcanzan", format="%d"),
+        "fb_atrasados": st.column_config.NumberColumn("Atrasados en Feedbacks", format="%d"),
         "asistencia": st.column_config.ProgressColumn("Asistencia", format="%.0f %%", min_value=0, max_value=100),
         "horas_plat": st.column_config.NumberColumn("Plataforma (h prom.)", format="%.1f"),
         "esperada": st.column_config.NumberColumn("Esperado a hoy (h)", format="%.1f"),

@@ -65,7 +65,18 @@ st.markdown(f"""
 - **Faltan (h):** {ui.num(C.HORAS_CULMINACION)} h menos sus horas válidas. **En plataforma (h):** lo que debe
   completar en plataforma si asiste solo a las clases mínimas de su ruta.
 - **Caso crítico** (solo grupos en curso): 0 h en plataforma con el grupo iniciado hace {C.DIAS_SIN_PLATAFORMA}+ días,
-  {C.DIAS_SIN_PLATAFORMA}+ días sin entrar a la plataforma, o *No alcanza*.
+  {C.DIAS_SIN_PLATAFORMA}+ días sin entrar a la plataforma, *No alcanza*, o {C.FEEDBACK_ATRASO_CRITICO} o más Feedbacks
+  pendientes.
+""")
+
+st.subheader("Feedbacks")
+st.markdown(f"""
+- **Qué cuenta:** los componentes «Feedback 1» a «Feedback {C.FEEDBACKS_TOTAL}» de la plataforma marcados como
+  completados (`is_completed = TRUE` en `VTD10_student_progress_detail`).
+- **Meta a hoy:** un Feedback por clase dictada a su grupo, hasta {C.FEEDBACKS_TOTAL}. Cuentan las clases de días
+  anteriores; la de hoy todavía no se exige.
+- **Pendientes:** meta menos Feedbacks hechos. **Estado:** Al día, 1 pendiente, 2 pendientes o 3 o más pendientes.
+- Con {C.FEEDBACK_ATRASO_CRITICO} o más pendientes y el grupo en curso, el estudiante es **caso crítico**.
 """)
 
 st.subheader("Datos personales")

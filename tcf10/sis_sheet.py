@@ -31,7 +31,7 @@ COL_PEDAGOGICO = "pedagogical_time"
 PESTANA_EST = ("Consulta por estudiante", "VTD10_student_progress_by_student")
 COLUMNAS_EST = ["incremental", "horas_plataforma_acreditadas", "ultima_fecha_completada", "ultima_leccion",
                 "ultimo_curso", "last_updated_statistics"]
-VERSION = "2026-11-24 franjas +5h"  # cambia la llave del caché cuando cambia la preparación
+VERSION = "2026-11-24 feedbacks"  # cambia la llave del caché cuando cambia la preparación
 # columnas que se conservan de cada pestaña (las demás, incluidos datos personales, se descartan)
 COLUMNAS = {
     "asis_det": ["incremental", "group_name", "session_id", "session_number", "session_date", "attended",
@@ -281,6 +281,24 @@ def fuente_plataforma(t: dict[str, pd.DataFrame]) -> str:
 
 
 # ------------------------------------------------------------------ equivalentes de las consultas
+def feedbacks(crudo: pd.DataFrame | None) -> pd.DataFrame:
+    """Feedbacks completados por estudiante, en formato largo: id_sis, n (1-8), fecha.
+
+    crudo: resultado de data.SQL_FEEDBACK (incremental, feedback «Feedback N», completado, fecha). Solo se conservan
+    los completados (is_completed = TRUE)."""
+    vacio = pd.DataFrame({"id_sis": pd.Series(dtype="Int64"), "n": pd.Series(dtype="int64"),
+                          "fecha": pd.Series(dtype="datetime64[ns]")})
+    if crudo is None or crudo.empty or not {"incremental", "feedback", "completado"} <= set(crudo.columns):
+        return vacio
+    n = pd.to_numeric(crudo["feedback"].astype(str).str.extract(r"(\d+)")[0], errors="coerce")
+    ok = crudo["completado"].astype(str).str.strip().str.lower().isin(["true", "1"])
+    out = pd.DataFrame({"id_sis": _num(crudo["incremental"]).astype("Int64"), "n": n,
+                        "fecha": _fecha(crudo["fecha"]) if "fecha" in crudo else pd.NaT})
+    out = out[ok & out["id_sis"].notna() & out["n"].between(1, 8)]
+    out["n"] = out["n"].astype("int64")
+    return out.drop_duplicates(["id_sis", "n"]).reset_index(drop=True)
+
+
 def franja_de_hora(h: float) -> str:
     from tcf10 import config as C
     return "Sin dato" if pd.isna(h) else C.franja_de_hora(h)
