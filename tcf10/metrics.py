@@ -14,6 +14,9 @@ import pandas as pd
 from tcf10 import config as C
 
 NIVELES_RIESGO = ["Alto", "Medio", "Bajo"]
+# Cambia cuando cambian las columnas que calcula preparar(): forma parte de la llave del caché de ui._preparado, así
+# un despliegue nuevo no reutiliza tablas viejas (nov-2026: «KeyError: 'critico'» tras agregar la tipificación).
+VERSION = "2026-11-24 tipificacion"
 
 
 def _n(x) -> str:

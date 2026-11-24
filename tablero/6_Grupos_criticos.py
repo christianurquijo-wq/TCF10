@@ -22,8 +22,11 @@ COLOR_RUTA = {"No alcanza": ui.ROJO, "2 clases + plataforma": ui.NARANJA, "1 cla
 ui.inicio("Grupos y casos críticos",
           "Asistencia y consumo de plataforma por grupo, con los casos que necesitan acción primero")
 df = ui.datos()
-df = ui.filtros(df, "gc", ("cohorte", "franja", "docente"))
 hoy = comun.hoy()
+if "critico" not in df:  # tabla de una versión anterior en memoria: se tipifica aquí
+    from tcf10 import metrics as M
+    df = M.tipificar(df, hoy)
+df = ui.filtros(df, "gc", ("cohorte", "franja", "docente"))
 # En formación: formalizados, no retirados, que aún no culminan y cuyo grupo ya inició.
 form = df[df["enrolado"] & ~df["retirado"] & df["cohorte_iniciada"]].copy()
 en_curso = form[~form["culmino"] & ~form["cohorte_cerrada"]]

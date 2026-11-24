@@ -24,7 +24,8 @@ def hoy() -> pd.Timestamp:
 def todos() -> pd.DataFrame:
     """Toda la base preparada (sin filtros)."""
     try:
-        df, _ = ui._preparado(hoy())
+        from tcf10 import metrics
+        df, _ = ui._preparado(hoy(), getattr(metrics, "VERSION", ""))
     except data.ErrorConfiguracion as e:
         st.error(str(e), icon=":material/error:")
         st.stop()

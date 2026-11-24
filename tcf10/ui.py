@@ -196,7 +196,7 @@ def iniciales(nombre: str) -> str:
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def _preparado(hoy: pd.Timestamp) -> tuple[pd.DataFrame, bool]:
+def _preparado(hoy: pd.Timestamp, version: str = "") -> tuple[pd.DataFrame, bool]:  # version: solo llave del caché
     benef, avance, cohortes, demo = data.cargar()
     return metrics.preparar(benef, avance, cohortes, hoy), demo
 
@@ -205,7 +205,7 @@ def datos() -> pd.DataFrame:
     """Datos listos para las páginas + banner si es demostración."""
     hoy = HOY_DEMO if data.modo_demo() else pd.Timestamp(datetime.now(TZ).date())
     try:
-        df, demo = _preparado(hoy)
+        df, demo = _preparado(hoy, getattr(metrics, "VERSION", ""))
     except data.ErrorConfiguracion as e:
         st.error(str(e), icon=":material/error:")
         st.stop()
