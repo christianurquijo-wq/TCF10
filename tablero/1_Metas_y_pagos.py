@@ -1,5 +1,4 @@
 """Metas contractuales y pagos: cuánto está asegurado, cuánto está en juego y qué falta."""
-import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -62,11 +61,13 @@ fig = px.bar(dist, x="cohorte", y="personas", color="riesgo", text="personas",
              category_orders={"riesgo": ui.ORDEN_RIESGO}, color_discrete_map=ui.COLOR_RIESGO)
 fig.update_traces(textposition="inside", texttemplate="%{text:,.0f}")
 fig.update_layout(xaxis_title=None, yaxis_title="Personas", separators=",.")
-st.plotly_chart(ui.dark_layout(fig, 380), width="stretch")
+ui.grafica(fig, "mp", "dist", {"x": "cohorte", "trace": "riesgo"}, 380)
+ui.chips_clic("mp")
+sel = ui.aplicar_clic(df, "mp")  # el clic filtra la tabla y la lista de abajo (las metas siguen sobre el total)
 
-coh = M.por_cohorte(df)
+coh = M.por_cohorte(sel)
 coh["valor_asegurado"] = coh["culminados"] * C.VALOR_POR_CULMINADO
-proy = df[df["enrolado"] & ~df["retirado"]].groupby("cohorte")["prob_culminar"].sum()
+proy = sel[sel["enrolado"] & ~sel["retirado"]].groupby("cohorte")["prob_culminar"].sum()
 coh["culminados_proyectados"] = coh["cohorte"].map(proy).fillna(0)
 coh["valor_proyectado"] = coh["culminados_proyectados"] * C.VALOR_POR_CULMINADO
 st.dataframe(
@@ -83,3 +84,13 @@ st.dataframe(
 st.caption(f"Proyección = culminados + activos × probabilidad de culminar según riesgo "
            f"(bajo {ui.pct(C.PROB_CULMINAR['Bajo'])}, medio {ui.pct(C.PROB_CULMINAR['Medio'])}, "
            f"alto {ui.pct(C.PROB_CULMINAR['Alto'])}). Supuesto ajustable en tcf10/config.py.")
+
+if st.session_state.get("xf_mp"):
+    st.subheader(f"Personas del filtro ({ui.num(len(sel))})")
+    lista = sel.assign(persona=sel["nombre"].map(ui.iniciales), motivo=sel.apply(M.motivo_riesgo, axis=1))
+    st.dataframe(lista[["id_sis", "persona", "cohorte", "grupo", "riesgo", "horas_validas", "tipo_ruta", "motivo"]]
+                 .sort_values("horas_validas"), hide_index=True, width="stretch", height=380, column_config={
+                     "id_sis": st.column_config.NumberColumn("ID SIS", format="%d"), "persona": "Iniciales",
+                     "cohorte": "Cohorte", "grupo": "Grupo", "riesgo": "Riesgo",
+                     "horas_validas": st.column_config.NumberColumn("Horas válidas", format="%.1f"),
+                     "tipo_ruta": "Ruta al 70 %", "motivo": "Por qué"})

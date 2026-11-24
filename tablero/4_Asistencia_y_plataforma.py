@@ -28,6 +28,22 @@ reciente = asis["fecha"] >= limite.normalize()
 por_registrar = int(asis.loc[reciente, "sin_registro"].sum())
 asis.loc[reciente, "sin_registro"] = 0
 prog = prog[prog["grupo"].isin(grupos_sel)]
+prog = prog.assign(curso=prog["curso"].map(ui.curso_corto))
+
+# Etiqueta del día/semana de cada sesión: es lo que devuelve el clic en la gráfica de tendencia.
+diaria = asis["fecha"].dt.normalize().nunique() <= 28  # el primer mes se lee mejor por día
+asis["semana"] = asis["fecha"].dt.normalize() if diaria else asis["fecha"].dt.to_period("W-SUN").dt.start_time
+_fmt = ui.etiqueta_dia if diaria else (lambda d: f"Sem. {d:%d/%m}")
+_etq = {d: _fmt(d) for d in asis["semana"].dropna().unique()}
+asis["periodo"] = [_etq.get(d, "") if pd.notna(d) else "" for d in asis["semana"]]
+
+# Filtros por clic: grupo (barras de grupos), periodo (tendencia) y curso (avance por curso).
+ui.chips_clic("ap")
+# La tendencia y la gráfica de cursos no se filtran por su propio clic, para seguir viendo el contexto.
+asis_tend = ui.aplicar_clic(asis.rename(columns={"periodo": "_periodo"}), "ap")
+prog_cur = ui.aplicar_clic(prog.rename(columns={"curso": "_curso"}), "ap").rename(columns={"_curso": "curso"})
+asis = ui.aplicar_clic(asis, "ap")
+prog = ui.aplicar_clic(prog, "ap")
 
 # ------------------------------------------------------------------ KPIs
 asistieron, no_asist, sin_reg = (int(asis[c].sum()) for c in ("asistieron", "no_asistieron", "sin_registro"))
@@ -56,16 +72,14 @@ if asis.empty and prog.empty:
     st.stop()
 
 # ------------------------------------------------------------------ tendencia de asistencia
-diaria = asis["fecha"].dt.normalize().nunique() <= 28  # el primer mes se lee mejor por día
 st.subheader("Asistencia por día" if diaria else "Asistencia por semana")
 st.caption("Porcentaje de asistencia sobre la asistencia registrada. Una caída sostenida anticipa deserción.")
-sem = asis.dropna(subset=["fecha"]).copy()
-sem["semana"] = sem["fecha"].dt.normalize() if diaria else sem["fecha"].dt.to_period("W-SUN").dt.start_time
+sem = asis_tend.dropna(subset=["semana"])
 sem = sem.groupby("semana", as_index=False)[["asistieron", "no_asistieron", "sin_registro"]].sum()
 # Solo los días/semanas con asistencia registrada: sin huecos vacíos en el eje (eje por categoría).
 sem = sem[(sem["asistieron"] + sem["no_asistieron"]) > 0].sort_values("semana")
 sem["asistencia"] = sem["asistieron"] / (sem["asistieron"] + sem["no_asistieron"])
-sem["etiqueta"] = sem["semana"].map(ui.etiqueta_dia if diaria else (lambda d: f"Sem. {d:%d/%m}"))
+sem["etiqueta"] = [_etq.get(d, "") for d in sem["semana"]]
 fig = go.Figure()
 fig.add_bar(x=sem["etiqueta"], y=sem["asistieron"], name="Asistieron", marker_color=ui.AZUL, yaxis="y2", opacity=.35)
 fig.add_scatter(x=sem["etiqueta"], y=sem["asistencia"], name="% asistencia", mode="lines+markers",
@@ -74,7 +88,7 @@ fig.update_layout(xaxis=dict(type="category"),
                   yaxis=dict(title="% asistencia", tickformat=".0%", range=[0, 1]),
                   yaxis2=dict(title="Asistencias", overlaying="y", side="right", showgrid=False),
                   xaxis_title=None, separators=",.", legend=dict(orientation="h", y=1.12))
-st.plotly_chart(ui.dark_layout(fig, 340), width="stretch")
+ui.grafica(fig, "ap", "tendencia", {"x": "periodo"}, 340)
 
 # ------------------------------------------------------------------ por grupo
 izq, der = st.columns(2)
@@ -91,7 +105,7 @@ with izq:
     fig.update_traces(texttemplate="%{text:.0%}", textposition="outside")
     fig.update_layout(xaxis=dict(tickformat=".0%", range=[0, 1.1], title=None),
                       yaxis=dict(autorange="reversed", title=None), coloraxis_showscale=False)
-    st.plotly_chart(ui.dark_layout(fig, 420), width="stretch")
+    ui.grafica(fig, "ap", "menor", {"y": "grupo"}, 420)
 with der:
     st.subheader("Grupos con asistencia sin registrar")
     g = por_grupo[por_grupo["sin_registro"] > 0].nlargest(15, "sin_registro")
@@ -103,13 +117,12 @@ with der:
                      color_discrete_sequence=[ui.AMARILLO])
         fig.update_traces(textposition="outside")
         fig.update_layout(xaxis_title="Cupos de sesión sin registro", yaxis=dict(autorange="reversed", title=None))
-        st.plotly_chart(ui.dark_layout(fig, 420), width="stretch")
+        ui.grafica(fig, "ap", "sinreg", {"y": "grupo"}, 420)
         st.caption("Sin registro, esas horas sincrónicas no cuentan para la culminación (63 h).")
 
 # ------------------------------------------------------------------ plataforma por curso
 st.subheader("Avance en plataforma por curso")
-prog = prog.assign(curso=prog["curso"].map(ui.curso_corto))
-cur = prog.groupby("curso", as_index=False)[["completado", "en_progreso", "sin_iniciar"]].sum()
+cur = prog_cur.groupby("curso", as_index=False)[["completado", "en_progreso", "sin_iniciar"]].sum()
 cur = cur.melt(id_vars="curso", var_name="estado", value_name="inscripciones")
 cur["estado"] = cur["estado"].map({"completado": "Completado", "en_progreso": "En progreso",
                                    "sin_iniciar": "Sin iniciar"})
@@ -119,10 +132,12 @@ fig = px.bar(cur, y="curso", x="inscripciones", color="estado", orientation="h",
 fig.update_traces(texttemplate="%{text:,.0f}", textposition="inside")
 fig.update_layout(barmode="stack", barnorm="percent", xaxis=dict(title="% de inscripciones", ticksuffix=" %"),
                   yaxis_title=None, separators=",.", legend=dict(orientation="h", y=1.12, title=None))
-st.plotly_chart(ui.dark_layout(fig, 60 + 45 * cur["curso"].nunique()), width="stretch")
+ui.grafica(fig, "ap", "cursos", {"y": "curso"}, 60 + 45 * cur["curso"].nunique())
 
 tabla = por_grupo.merge(
     prog.groupby("grupo", as_index=False).agg(avance_plataforma=("avance_promedio", "mean")), on="grupo", how="outer")
+if "periodo" in st.session_state.get("xf_ap", {}):  # filtro por fecha: solo los grupos con sesión ese día/semana
+    tabla = tabla[tabla["grupo"].isin(asis["grupo"])]
 for c in ("asistencia", "cobertura", "avance_plataforma"):
     tabla[c] = tabla[c] * 100
 st.dataframe(

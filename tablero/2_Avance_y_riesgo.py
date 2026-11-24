@@ -10,6 +10,8 @@ ui.inicio("Avance y riesgo", f"Horas válidas frente a la meta de {ui.num(C.HORA
           f"(70 % de {ui.num(C.HORAS_TOTALES)} h) y alertas tempranas de deserción")
 df = ui.datos()
 df = ui.filtros(df, "av", ("cohorte", "docente", "grupo"))
+ui.chips_clic("av")
+df = ui.aplicar_clic(df, "av")
 en_curso = df[df["riesgo"].isin(["Alto", "Medio", "Bajo"])]
 
 c1, c2, c3, c4 = st.columns(4)
@@ -41,7 +43,7 @@ with izq:
                   annotation_text=f"Meta {ui.num(C.HORAS_CULMINACION)} h", annotation_position="top")
     fig.update_layout(barmode="stack", xaxis_title="Horas válidas (sincrónicas + asincrónicas)",
                       yaxis_title="Personas", separators=",.")
-    st.plotly_chart(ui.dark_layout(fig, 360), width="stretch")
+    ui.grafica(fig, "av", "histo", {"trace": "riesgo"}, 360)
 with der:
     st.subheader("Riesgo por grupo")
     g = (en_curso.groupby(["grupo", "riesgo"]).size().unstack(fill_value=0)
@@ -52,14 +54,17 @@ with der:
         fig.add_bar(y=g.index, x=g[r], name=r, orientation="h", marker_color=ui.COLOR_RIESGO[r])
     fig.update_layout(barmode="stack", yaxis=dict(autorange="reversed", title=None), xaxis_title="Personas",
                       separators=",.")
-    st.plotly_chart(ui.dark_layout(fig, 360), width="stretch")
+    ui.grafica(fig, "av", "grupos", {"y": "grupo", "trace": "riesgo"}, 360)
     st.caption("Los 15 grupos con más personas en riesgo alto.")
 
 # ------------------------------------------------------------------ lista priorizada
 st.subheader("Lista de seguimiento priorizada")
 st.caption("Ordenada por urgencia. Por ser una app pública solo se muestran el ID SIS y las iniciales; "
            "el gestor ubica a la persona en el SIS con el ID.")
-niveles = st.multiselect("Nivel de riesgo", ["Alto", "Medio", "Bajo"], default=["Alto", "Medio"], key="av_niv")
+niveles = st.multiselect("Nivel de riesgo", ["Alto", "Medio", "Bajo"], key="av_niv",
+                         default=st.session_state.get("xf_av", {}).get("riesgo") and
+                         [r for r in st.session_state["xf_av"]["riesgo"] if r in ("Alto", "Medio", "Bajo")]
+                         or ["Alto", "Medio"])
 lista = en_curso[en_curso["riesgo"].isin(niveles)].copy()
 lista["orden"] = lista["riesgo"].map({"Alto": 0, "Medio": 1, "Bajo": 2})
 lista = lista.sort_values(["orden", "ritmo", "dias_sin_actividad"], ascending=[True, True, False])

@@ -27,6 +27,8 @@ if "critico" not in df:  # tabla de una versión anterior en memoria: se tipific
     from tcf10 import metrics as M
     df = M.tipificar(df, hoy)
 df = ui.filtros(df, "gc", ("cohorte", "franja", "docente"))
+ui.chips_clic("gc")
+df = ui.aplicar_clic(df, "gc")
 # En formación: formalizados, no retirados, que aún no culminan y cuyo grupo ya inició.
 form = df[df["enrolado"] & ~df["retirado"] & df["cohorte_iniciada"]].copy()
 en_curso = form[~form["culmino"] & ~form["cohorte_cerrada"]]
@@ -63,7 +65,7 @@ with izq:
                            text=[ui.num(v) for v in t.values], textposition="outside"))
     fig.update_layout(yaxis=dict(autorange="reversed", title=None), xaxis_title="Estudiantes", separators=",.",
                       xaxis=dict(range=[0, max(1, t.max()) * 1.18]))
-    st.plotly_chart(ui.dark_layout(fig, 300), width="stretch")
+    ui.grafica(fig, "gc", "ruta", {"y": "tipo_ruta"}, 300)
     st.caption(f"Con la plataforma al 100 % ({ui.num(C.HORAS_ASINCRONICAS, 1)} h) se necesitan "
                f"{ui.num(C.HORAS_CULMINACION - C.HORAS_ASINCRONICAS, 1)} h con docente: 2 clases de "
                f"{ui.num(C.HORAS_POR_SESION)} h. Quien ya tiene 2 clases llega solo con la plataforma.")
@@ -92,7 +94,7 @@ with der:
     fig.update_layout(barmode="stack", xaxis_title="Estudiantes críticos", yaxis_title=None, separators=",.",
                       legend=dict(orientation="h", y=1.12))
     if not top.empty:
-        st.plotly_chart(ui.dark_layout(fig, 60 + 26 * len(top)), width="stretch")
+        ui.grafica(fig, "gc", "grupos", {"y": "grupo"}, 60 + 26 * len(top))
 
 st.subheader("Asistencia y plataforma por grupo")
 st.caption("Ordenado de más a menos casos críticos (%). «Plataforma vs. esperado»: horas promedio del grupo frente "

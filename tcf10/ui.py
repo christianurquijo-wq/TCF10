@@ -254,6 +254,81 @@ def dark_layout(fig, height: int = 340):
     return fig
 
 
+# ------------------------------------------------------------------ gráficas que filtran (vista interna)
+ETIQUETAS_FILTRO = {"grupo": "Grupo", "riesgo": "Riesgo", "cohorte": "Cohorte", "tipo_ruta": "Ruta al 70 %",
+                    "curso": "Curso", "periodo": "Fecha", "docente": "Docente", "franja": "Franja"}
+
+
+def _clave_filtros(pagina: str) -> str:
+    return f"xf_{pagina}"
+
+
+def aplicar_clic(df: pd.DataFrame, pagina: str) -> pd.DataFrame:
+    """Aplica los filtros hechos con clic en las gráficas de la página (solo las columnas que la tabla tenga)."""
+    for col, valores in st.session_state.get(_clave_filtros(pagina), {}).items():
+        if col in df:
+            df = df[df[col].astype(str).isin(valores)]
+    return df
+
+
+def _quitar_filtros(pagina: str) -> None:
+    st.session_state[_clave_filtros(pagina)] = {}
+
+
+def chips_clic(pagina: str) -> None:
+    """Muestra los filtros activos por clic y el botón para quitarlos (o la pista de uso si no hay)."""
+    f = st.session_state.get(_clave_filtros(pagina), {})
+    if not f:
+        st.caption(":material/touch_app: Haz clic en una barra o punto de las gráficas para filtrar la página; "
+                   "clic de nuevo en el mismo elemento para quitar el filtro.")
+        return
+    texto = " · ".join(f"**{ETIQUETAS_FILTRO.get(c, c)}:** {', '.join(v)}" for c, v in f.items())
+    a, b = st.columns([5, 1], vertical_alignment="center")
+    a.info(f"Filtro por clic — {texto}", icon=":material/filter_alt:")
+    b.button("Quitar filtro", icon=":material/filter_alt_off:", on_click=_quitar_filtros, args=(pagina,),
+             key=f"xf_quitar_{pagina}", width="stretch")
+
+
+def grafica(fig, pagina: str, clave: str, campos: dict, height: int = 340) -> None:
+    """Dibuja la gráfica y, al hacer clic en una barra o punto, filtra la página.
+
+    campos: de dónde sale cada valor del punto → columna a filtrar. Fuentes: "x", "y" o "trace" (nombre de la serie,
+    p. ej. el riesgo en barras apiladas). Clic de nuevo en lo mismo = quitar ese filtro.
+    """
+    ver_k = f"xfv_{pagina}_{clave}"
+    ver = st.session_state.get(ver_k, 0)
+    evento = st.plotly_chart(dark_layout(fig, height), width="stretch", on_select="rerun", selection_mode="points",
+                             key=f"xf_{pagina}_{clave}_{ver}")
+    try:
+        puntos = evento.selection.points or []
+    except AttributeError:
+        puntos = (evento or {}).get("selection", {}).get("points", []) if isinstance(evento, dict) else []
+    if not puntos:
+        return
+    nuevo: dict[str, set] = {}
+    for p in puntos:
+        for fuente, col in campos.items():
+            if fuente == "trace":
+                n = p.get("curve_number")
+                v = fig.data[n].name if n is not None and n < len(fig.data) else None
+            else:
+                v = p.get(fuente)
+            if v is not None and str(v) != "":
+                nuevo.setdefault(col, set()).add(str(v))
+    if not nuevo:
+        return
+    actuales = dict(st.session_state.get(_clave_filtros(pagina), {}))
+    mismo = all(sorted(v) == actuales.get(c) for c, v in nuevo.items())
+    for c, v in nuevo.items():
+        if mismo:
+            actuales.pop(c, None)
+        else:
+            actuales[c] = sorted(v)
+    st.session_state[_clave_filtros(pagina)] = actuales
+    st.session_state[ver_k] = ver + 1  # gráfica nueva: sin la selección anterior marcada
+    st.rerun()
+
+
 DIAS_ES = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
 
 

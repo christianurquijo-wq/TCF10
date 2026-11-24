@@ -65,10 +65,12 @@ fig = px.bar(top, x="grupo", y="activos", color="excede_maximo", text="activos",
 fig.add_hline(y=C.MAX_ACTIVOS_POR_GRUPO, line_dash="dash", line_color=ui.NARANJA,
               annotation_text=f"Máximo {C.MAX_ACTIVOS_POR_GRUPO}")
 fig.update_layout(showlegend=False, xaxis_tickangle=-60)
-st.plotly_chart(ui.dark_layout(fig, 340), width="stretch")
+ui.grafica(fig, "eq", "grupos", {"x": "grupo"}, 340)
 st.caption(f"Los 25 grupos con más activos de {len(g)} grupos. La tabla completa está abajo.")
+ui.chips_clic("eq")
+sel = ui.aplicar_clic(sel, "eq")  # clic en un grupo: la tabla y la carga docente muestran ese grupo
 st.dataframe(
-    g, hide_index=True, width="stretch",
+    ui.aplicar_clic(g, "eq"), hide_index=True, width="stretch",
     column_config={
         "cohorte": "Cohorte", "grupo": "Grupo", "perfil": "Perfil", "nivel": "Nivel", "docente": "Docente",
         "gestor": "Gestor", "franja": "Franja", "integrantes": "Integrantes", "activos": "Activos",
