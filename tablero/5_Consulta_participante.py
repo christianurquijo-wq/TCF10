@@ -6,35 +6,18 @@ from tcf10 import config as C
 from tcf10 import metrics as M
 from tcf10 import ui
 
-ui.inicio("Consulta por participante", "Estado de formación de cada persona: filtra por cohorte, grupo, franja "
-          "o busca por cédula")
+ui.inicio("Consulta por participante", "Estado de formación de cada persona: filtra por cohorte, grupo o jornada, "
+          "o busca por documento")
 correo = ui.acceso_restringido()
 df = ui.datos()
 if correo:
     st.caption(f"Sesión: {correo}")
 
 # ------------------------------------------------------------------ filtros
-c1, c2, c3, c4 = st.columns([1, 1, 1, 1.1])
-opciones = lambda col, base: sorted(base[col].dropna().astype(str).unique(),  # noqa: E731
-                                    key=C.orden_franja if col == "franja" else None)
-coh = c1.multiselect("Cohorte", opciones("cohorte", df), placeholder="Todas", key="cp_coh")
-base = df[df["cohorte"].isin(coh)] if coh else df
-gru = c2.multiselect("Grupo", opciones("grupo", base), placeholder="Todos", key="cp_gru")
-base = base[base["grupo"].isin(gru)] if gru else base
-fra = c3.multiselect("Franja", opciones("franja", base), placeholder="Todas", key="cp_fra")
-base = base[base["franja"].isin(fra)] if fra else base
-cedula = c4.text_input("Cédula", placeholder="Número sin puntos", key="cp_ced").strip()
-
-if cedula:
-    if "huella" not in df:
-        st.info("La búsqueda por cédula funciona con la base de Formalización conectada.")
-        st.stop()
-    from tcf10.base_atenea import huella
-    h = huella(pd.Series([cedula])).iloc[0]
-    base = df[df["huella"] == h] if h else df.iloc[0:0]   # la cédula busca en toda la base, sin otros filtros
-    if base.empty:
-        st.warning("No hay ningún participante con esa cédula en la base de Formalización.", icon=":material/search_off:")
-        st.stop()
+base = ui.barra_filtros(df, "cp", ("cohorte", "grupo", "franja"))
+if base.empty:
+    st.warning("No hay participantes con esos filtros o ese documento.", icon=":material/search_off:")
+    st.stop()
 
 # ------------------------------------------------------------------ resumen del filtro
 base = base.copy()
@@ -67,7 +50,7 @@ if len(base) == 1:
     with b:
         filas = {
             "ID SIS": int(f["id_sis"]) if f["id_sis"] > 0 else "Sin usuario en el SIS",
-            "Cohorte": f["cohorte"], "Grupo": f["grupo"], "Franja": f["franja"], "Perfil": f["perfil"],
+            "Cohorte": f["cohorte"], "Grupo": f["grupo"], "Jornada": f["franja"], "Perfil": f["perfil"],
             "Nivel": f["nivel"],
             "Horas sincrónicas": f"{ui.num(f['horas_sinc_val'], 1)} de {ui.num(C.HORAS_SINCRONICAS, 1)} h",
             "Horas asincrónicas": f"{ui.num(f['horas_asinc_val'], 1)} de {ui.num(C.HORAS_ASINCRONICAS, 1)} h",
@@ -87,7 +70,7 @@ if len(base) == 1:
     st.caption(f"Avance hacia la culminación: {ui.pct(min(1, f['horas_validas'] / C.HORAS_CULMINACION))}")
 
 # ------------------------------------------------------------------ listado
-st.subheader("Participantes")
+st.subheader(f"Participantes · {ui.num(len(base))}")
 base["persona"] = base["nombre"].map(ui.iniciales)
 base["id_sis_v"] = base["id_sis"].where(base["id_sis"] > 0)
 base["_orden"] = base["riesgo"].map({"Alto": 0, "Medio": 1, "Bajo": 2, "Culminó": 3}).fillna(4)
@@ -99,7 +82,7 @@ st.dataframe(
     vista, hide_index=True, width="stretch", height=480,
     column_config={
         "id_sis_v": st.column_config.NumberColumn("ID SIS", format="%d"), "persona": "Iniciales",
-        "cohorte": "Cohorte", "grupo": "Grupo", "franja": "Franja", "estado": "Estado",
+        "cohorte": "Cohorte", "grupo": "Grupo", "franja": "Jornada", "estado": "Estado",
         "horas_sinc_val": st.column_config.NumberColumn("Sincrónicas (h)", format="%.1f"),
         "horas_asinc_val": st.column_config.NumberColumn("Asincrónicas (h)", format="%.1f"),
         "horas_validas": st.column_config.ProgressColumn("Horas válidas", format="%.1f", min_value=0,
@@ -112,4 +95,4 @@ st.dataframe(
     })
 st.download_button("Descargar (CSV)", vista.to_csv(index=False).encode("utf-8-sig"), "tcf10_participantes.csv",
                    "text/csv", icon=":material/download:")
-st.caption("Por privacidad se muestran ID SIS e iniciales; la cédula solo se usa para buscar y no se guarda.")
+st.caption("Por privacidad se muestran ID SIS e iniciales; el documento solo se usa para buscar y no se guarda.")

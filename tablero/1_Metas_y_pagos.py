@@ -52,45 +52,48 @@ st.caption("«En curso»: el índice todavía es parcial (faltan cohortes por en
            "«Sin datos»: aún no hay certificaciones o validación PILA registradas. Los índices son todo o nada: "
            "si el valor redondeado a entero queda por debajo de la meta, ese pago no se recibe.")
 
-# ------------------------------------------------------------------ proyección por cohorte
-st.subheader("¿Cuántas personas llegarán a culminar?")
-st.caption("Cada barra reparte a las personas de la cohorte según su situación hoy. Quienes están en riesgo "
-           "alto o medio son la oportunidad de recuperar dinero del pago 2.")
-dist = (df.groupby(["cohorte", "riesgo"]).size().rename("personas").reset_index())
-fig = px.bar(dist, x="cohorte", y="personas", color="riesgo", text="personas",
-             category_orders={"riesgo": ui.ORDEN_RIESGO}, color_discrete_map=ui.COLOR_RIESGO)
-fig.update_traces(textposition="inside", texttemplate="%{text:,.0f}")
-fig.update_layout(xaxis_title=None, yaxis_title="Personas", separators=",.")
-ui.grafica(fig, "mp", "dist", {"x": "cohorte", "trace": "riesgo"}, 380)
-ui.chips_clic("mp")
-sel = ui.aplicar_clic(df, "mp")  # el clic filtra la tabla y la lista de abajo (las metas siguen sobre el total)
+# ------------------------------------------------------------------ proyección y personas
+t_proy, t_pers = ui.pestanas(["Proyección por cohorte", "Personas"], "mp")
+with t_proy:
+    st.caption("Las metas y los pagos de arriba son siempre del contrato completo. Los filtros y los clics aplican "
+               "a esta proyección y a la lista de personas.")
+    sel = ui.barra_filtros(df, "mp", ("cohorte", "grupo", "franja"))
+    st.markdown("**¿Cuántas personas llegarán a culminar?** · cada barra reparte a las personas de la cohorte "
+                "según su situación hoy")
+    dist = (sel.groupby(["cohorte", "riesgo"]).size().rename("personas").reset_index())
+    fig = px.bar(dist, x="cohorte", y="personas", color="riesgo", text="personas",
+                 category_orders={"riesgo": ui.ORDEN_RIESGO}, color_discrete_map=ui.COLOR_RIESGO)
+    fig.update_traces(textposition="inside", texttemplate="%{text:,.0f}")
+    fig.update_layout(xaxis_title=None, yaxis_title="Personas", separators=",.")
+    ui.grafica(fig, "mp", "dist", {"x": "cohorte", "trace": "riesgo"}, 380)
 
-coh = M.por_cohorte(sel)
-coh["valor_asegurado"] = coh["culminados"] * C.VALOR_POR_CULMINADO
-proy = sel[sel["enrolado"] & ~sel["retirado"]].groupby("cohorte")["prob_culminar"].sum()
-coh["culminados_proyectados"] = coh["cohorte"].map(proy).fillna(0)
-coh["valor_proyectado"] = coh["culminados_proyectados"] * C.VALOR_POR_CULMINADO
-st.dataframe(
-    coh[["cohorte", "enrolados", "culminados", "culminados_proyectados", "riesgo_alto", "riesgo_medio",
-         "valor_asegurado", "valor_proyectado"]],
-    hide_index=True, width="stretch",
-    column_config={
-        "cohorte": "Cohorte", "enrolados": "Enrolados", "culminados": "Culminaron",
-        "culminados_proyectados": st.column_config.NumberColumn("Proyección culminados", format="%.0f"),
-        "riesgo_alto": "Riesgo alto", "riesgo_medio": "Riesgo medio",
-        "valor_asegurado": st.column_config.NumberColumn("Pago 2 asegurado ($)", format="$%,.0f"),
-        "valor_proyectado": st.column_config.NumberColumn("Pago 2 proyectado ($)", format="$%,.0f"),
-    })
-st.caption(f"Proyección = culminados + activos × probabilidad de culminar según riesgo "
-           f"(bajo {ui.pct(C.PROB_CULMINAR['Bajo'])}, medio {ui.pct(C.PROB_CULMINAR['Medio'])}, "
-           f"alto {ui.pct(C.PROB_CULMINAR['Alto'])}). Supuesto ajustable en tcf10/config.py.")
+    coh = M.por_cohorte(sel)
+    coh["valor_asegurado"] = coh["culminados"] * C.VALOR_POR_CULMINADO
+    proy = sel[sel["enrolado"] & ~sel["retirado"]].groupby("cohorte")["prob_culminar"].sum()
+    coh["culminados_proyectados"] = coh["cohorte"].map(proy).fillna(0)
+    coh["valor_proyectado"] = coh["culminados_proyectados"] * C.VALOR_POR_CULMINADO
+    st.dataframe(
+        coh[["cohorte", "enrolados", "culminados", "culminados_proyectados", "riesgo_alto", "riesgo_medio",
+             "valor_asegurado", "valor_proyectado"]],
+        hide_index=True, width="stretch",
+        column_config={
+            "cohorte": st.column_config.TextColumn("Cohorte", pinned=True), "enrolados": "Enrolados",
+            "culminados": "Culminaron",
+            "culminados_proyectados": st.column_config.NumberColumn("Proyección culminados", format="%.0f"),
+            "riesgo_alto": "Riesgo alto", "riesgo_medio": "Riesgo medio",
+            "valor_asegurado": st.column_config.NumberColumn("Pago 2 asegurado ($)", format="$%,.0f"),
+            "valor_proyectado": st.column_config.NumberColumn("Pago 2 proyectado ($)", format="$%,.0f"),
+        })
+    st.caption(f"Proyección = culminados + activos × probabilidad de culminar según riesgo "
+               f"(bajo {ui.pct(C.PROB_CULMINAR['Bajo'])}, medio {ui.pct(C.PROB_CULMINAR['Medio'])}, "
+               f"alto {ui.pct(C.PROB_CULMINAR['Alto'])}). Supuesto ajustable en tcf10/config.py.")
 
-if st.session_state.get("xf_mp"):
-    st.subheader(f"Personas del filtro ({ui.num(len(sel))})")
+with t_pers:
+    st.caption(f"{ui.num(len(sel))} personas con los filtros de la pestaña anterior, las de menos horas primero.")
     lista = sel.assign(persona=sel["nombre"].map(ui.iniciales), motivo=sel.apply(M.motivo_riesgo, axis=1))
     st.dataframe(lista[["id_sis", "persona", "cohorte", "grupo", "riesgo", "horas_validas", "tipo_ruta", "motivo"]]
-                 .sort_values("horas_validas"), hide_index=True, width="stretch", height=380, column_config={
-                     "id_sis": st.column_config.NumberColumn("ID SIS", format="%d"), "persona": "Iniciales",
-                     "cohorte": "Cohorte", "grupo": "Grupo", "riesgo": "Riesgo",
+                 .sort_values("horas_validas"), hide_index=True, width="stretch", height=520, column_config={
+                     "id_sis": st.column_config.NumberColumn("ID SIS", format="%d", pinned=True),
+                     "persona": "Iniciales", "cohorte": "Cohorte", "grupo": "Grupo", "riesgo": "Riesgo",
                      "horas_validas": st.column_config.NumberColumn("Horas válidas", format="%.1f"),
                      "tipo_ruta": "Ruta al 70 %", "motivo": "Por qué"})

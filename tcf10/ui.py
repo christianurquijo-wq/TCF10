@@ -28,11 +28,33 @@ CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap');
 .block-container {padding-top: 1.6rem;}
+/* Vista interna: tarjetas y pestañas que se adaptan a pantallas pequeñas */
+@media (max-width: 760px) {
+  .block-container {padding-left: .8rem; padding-right: .8rem;}
+  .cabecera {flex-direction: column; align-items: flex-start;}
+  .cabecera h1 {font-size: 1.6rem;}
+  .cabecera img {height: 38px;}
+  .valor {font-size: 1.6rem !important;}
+  .tarjeta {padding: 10px 12px;}
+  .tarjeta h4 {font-size: .7rem;}
+  .sub {font-size: .78rem;}
+  /* tarjetas y filtros de dos en dos en el celular (Streamlit los apila de a uno) */
+  div[data-testid="stHorizontalBlock"]:has(.tarjeta), .st-key-barra_filtros div[data-testid="stHorizontalBlock"] {
+    flex-wrap: wrap !important; gap: .5rem !important;}
+  div[data-testid="stHorizontalBlock"]:has(.tarjeta) > div[data-testid="stColumn"],
+  .st-key-barra_filtros div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+    flex: 1 1 calc(50% - .5rem) !important; min-width: calc(50% - .5rem) !important; width: calc(50% - .5rem) !important;}
+  .st-key-barra_filtros [data-testid="stCaptionContainer"] {display: none;}
+}
+[data-testid="stTabs"] button p {font-size: 1rem; font-weight: 600;}
+.tarjeta {margin-bottom: 8px;}
 h1, h2, h3 {font-family: 'Barlow Semi Condensed', sans-serif; color: #141439; letter-spacing: -.01em;}
 h1 {font-weight: 700;}
 h2, h3 {font-weight: 600;}
 .cabecera {display:flex; align-items:center; justify-content:space-between; gap:16px;
            border-bottom: 2px solid #B7D9E6; padding-bottom: 10px; margin-bottom: 6px;}
+.cabecera.compacta {border-bottom: 1px solid #D3E7EF; padding-bottom: 6px;}
+.cabecera.compacta h1 {font-size: 1.7rem;}
 .cabecera .eyebrow {font-size:.8rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:#E55B0E;}
 .cabecera h1 {margin:0; padding:0; font-size:2.1rem; line-height:1.1;}
 .cabecera .bajada {color:#3C4170; font-size:.95rem; margin-top:4px;}
@@ -84,6 +106,11 @@ def chip_kuepa(texto: str = "Operado por") -> str:
 
 def inicio(titulo: str, subtitulo: str = "") -> None:
     st.markdown(CSS, unsafe_allow_html=True)
+    if st.session_state.get("vista") == "interna":  # la banda superior ya lleva marca y logos: encabezado compacto
+        st.markdown(f"<div class='cabecera compacta'><div><h1>{html.escape(titulo)}</h1>"
+                    + (f"<div class='bajada'>{html.escape(subtitulo)}</div>" if subtitulo else "") + "</div></div>",
+                    unsafe_allow_html=True)
+        return
     logo = _logo()
     st.markdown(
         f"<div class='cabecera'><div><div class='eyebrow'>Talento Capital · Formación 10</div>"
@@ -261,6 +288,135 @@ def dark_layout(fig, height: int = 340):
     return fig
 
 
+# ------------------------------------------------------------------ vista interna: estilo de gráficas
+CONFIG_GRAFICA = {"displayModeBar": False, "responsive": True}  # sin barra de herramientas: solo clic y hover
+
+
+def estilo(fig, height: int = 340, leyenda: bool | None = None):
+    """Usar con st.plotly_chart(..., theme=None, config=CONFIG_GRAFICA) o con ui.mostrar(): el tema de Streamlit
+    reescribe márgenes y leyendas.
+    Estilo de la vista interna: leyenda arriba en una línea (no tapa los datos), márgenes automáticos para que
+    las etiquetas largas no se corten, textos que se ocultan si no caben y sin zoom accidental (ejes fijos)."""
+    dark_layout(fig, height)
+    con_leyenda = (sum(1 for t in fig.data if t.showlegend is not False and t.name) > 1) if leyenda is None \
+        else leyenda
+    fig.update_layout(
+        margin=dict(t=46 if con_leyenda else 16, b=8, l=8, r=16), font=dict(size=12),
+        legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="left", x=0, font=dict(size=12),
+                    bgcolor="rgba(0,0,0,0)", entrywidth=0, itemwidth=30, tracegroupgap=0),
+        showlegend=con_leyenda, uniformtext=dict(minsize=10, mode="hide"), hovermode="closest")
+    fig.update_xaxes(automargin=True, fixedrange=True, title_standoff=8)
+    fig.update_yaxes(automargin=True, fixedrange=True, title_standoff=8)
+    fig.update_traces(selector=dict(type="bar"), cliponaxis=False)
+    return fig
+
+
+def mostrar(fig, height: int = 340, leyenda: bool | None = None, alto_max: int | None = 520) -> None:
+    """Gráfica de solo lectura con el estilo de la vista interna (con scroll si es más alta que alto_max)."""
+    fig = estilo(fig, height, leyenda)
+    caja = st.container(height=alto_max) if alto_max and height > alto_max else st.container()
+    with caja:
+        st.plotly_chart(fig, width="stretch", config=CONFIG_GRAFICA, theme=None)
+
+
+def linea_meta(fig, valor: float, texto: str, eje: str = "x", color: str = NOCHE) -> None:
+    """Línea de meta punteada con su texto en la leyenda (no encima de las barras)."""
+    if valor is None or pd.isna(valor):
+        return
+    if eje == "x":
+        fig.add_vline(x=valor, line_dash="dash", line_color=color, line_width=2)
+    else:
+        fig.add_hline(y=valor, line_dash="dash", line_color=color, line_width=2)
+    # Traza solo para la leyenda: un punto sobre un dato que ya existe (con None Plotly crea una categoría vacía).
+    def primero(eje_ref: str):
+        for t in fig.data:
+            v = getattr(t, eje_ref)
+            if v is not None and len(v):
+                return [list(v)[0]]
+        return [0]
+    x0, y0 = ([valor], primero("y")) if eje == "x" else (primero("x"), [valor])
+    fig.add_scatter(x=x0, y=y0, mode="lines", name=texto, line=dict(color=color, dash="dash", width=2),
+                    hoverinfo="skip")
+
+
+def alto_barras(n: int, por_barra: int = 26, minimo: int = 220) -> int:
+    """Alto de una gráfica de barras horizontales para que cada barra se lea (la caja hace scroll si es larga)."""
+    return max(minimo, 70 + por_barra * int(n))
+
+
+def pestanas(nombres: list[str], clave: str):
+    """Pestañas que recuerdan cuál estaba abierta (al filtrar con clic no vuelve a la primera)."""
+    try:
+        return st.tabs(nombres, key=f"tab_{clave}", on_change="rerun")
+    except TypeError:  # Streamlit anterior a las pestañas con estado
+        return st.tabs(nombres)
+
+
+# ------------------------------------------------------------------ vista interna: barra única de filtros
+ETIQUETAS_BARRA = {"cohorte": "Cohorte", "grupo": "Grupo", "franja": "Jornada", "docente": "Docente",
+                   "perfil": "Perfil", "nivel": "Nivel"}
+
+
+def _limpiar_todo(pagina: str, columnas: tuple) -> None:
+    for c in columnas:
+        st.session_state[f"bf_{c}"] = []
+        st.session_state[f"bfv_{c}"] = []
+    st.session_state["bf_doc"] = ""
+    st.session_state["bfv_doc"] = ""
+    st.session_state[_clave_filtros(pagina)] = {}
+
+
+def _por_documento(df: pd.DataFrame, texto: str) -> pd.DataFrame:
+    import re
+    digitos = re.sub(r"\D", "", texto)
+    if not digitos:
+        return df
+    from vista_atenea import comun
+    llaves = [c for c in ("id_sis", "huella") if c in df]
+    ident = comun.con_identidad(df[llaves].reset_index(drop=True))
+    docs = ident["documento"].astype("string").fillna("").str.replace(r"\D", "", regex=True)
+    return df[docs.str.contains(digitos, regex=False).to_numpy()]
+
+
+def barra_filtros(df: pd.DataFrame, pagina: str, columnas=("cohorte", "grupo", "franja"),
+                  documento: bool = True) -> pd.DataFrame:
+    """Una sola barra de filtros por página de la vista interna. Lo elegido se conserva al cambiar de página;
+    los clics en las gráficas aparecen aquí mismo y se quitan con «Limpiar filtros»."""
+    columnas = tuple(c for c in columnas if c in df)
+    with st.container(border=True, key="barra_filtros"):
+        cols = st.columns(len(columnas) + (1 if documento else 0))
+        for col, c in zip(cols, columnas):
+            opciones = sorted(df[c].dropna().astype(str).unique(), key=C.orden_franja if c == "franja" else None)
+            k = f"bf_{c}"
+            guardado = st.session_state.get(k, st.session_state.get(f"bfv_{c}", []))
+            st.session_state[k] = [v for v in (guardado or []) if v in opciones]
+            elegido = col.multiselect(ETIQUETAS_BARRA.get(c, c), opciones, key=k, placeholder="Todos")
+            st.session_state[f"bfv_{c}"] = elegido
+            if elegido:
+                df = df[df[c].astype(str).isin(elegido)]
+        if documento:
+            st.session_state["bf_doc"] = st.session_state.get("bf_doc", st.session_state.get("bfv_doc", ""))
+            texto = cols[-1].text_input("Documento", key="bf_doc", placeholder="Buscar por número",
+                                        icon=":material/search:")
+            st.session_state["bfv_doc"] = texto
+            df = _por_documento(df, texto)
+        clics = st.session_state.get(_clave_filtros(pagina), {})
+        activos = any(st.session_state.get(f"bfv_{c}") for c in columnas) or bool(st.session_state.get("bfv_doc"))
+        if clics or activos:
+            a, b = st.columns([4, 1], vertical_alignment="center")
+            if clics:
+                a.markdown(":material/touch_app: **Desde las gráficas:** " + " · ".join(
+                    f"{ETIQUETAS_FILTRO.get(c, c)}: {', '.join(v)}" for c, v in clics.items()))
+            else:
+                a.caption(f"{num(len(df))} estudiantes con estos filtros.")
+            b.button("Limpiar filtros", icon=":material/filter_alt_off:", on_click=_limpiar_todo,
+                     args=(pagina, columnas), key=f"bf_limpiar_{pagina}", width="stretch")
+        else:
+            st.caption(":material/touch_app: Toca una barra o un punto de cualquier gráfica para filtrar; "
+                       "tócalo de nuevo para quitar ese filtro.")
+    return aplicar_clic(df, pagina)
+
+
 # ------------------------------------------------------------------ gráficas que filtran (vista interna)
 ETIQUETAS_FILTRO = {"grupo": "Grupo", "riesgo": "Riesgo", "cohorte": "Cohorte", "tipo_ruta": "Ruta al 70 %",
                     "curso": "Curso", "periodo": "Fecha", "docente": "Docente", "franja": "Franja",
@@ -297,7 +453,8 @@ def chips_clic(pagina: str) -> None:
              key=f"xf_quitar_{pagina}", width="stretch")
 
 
-def grafica(fig, pagina: str, clave: str, campos: dict, height: int = 340) -> None:
+def grafica(fig, pagina: str, clave: str, campos: dict, height: int = 340, alto_max: int | None = 520,
+            leyenda: bool | None = None) -> None:
     """Dibuja la gráfica y, al hacer clic en una barra o punto, filtra la página.
 
     campos: de dónde sale cada valor del punto → columna a filtrar. Fuentes: "x", "y" o "trace" (nombre de la serie,
@@ -305,8 +462,11 @@ def grafica(fig, pagina: str, clave: str, campos: dict, height: int = 340) -> No
     """
     ver_k = f"xfv_{pagina}_{clave}"
     ver = st.session_state.get(ver_k, 0)
-    evento = st.plotly_chart(dark_layout(fig, height), width="stretch", on_select="rerun", selection_mode="points",
-                             key=f"xf_{pagina}_{clave}_{ver}")
+    fig = estilo(fig, height, leyenda)
+    caja = st.container(height=alto_max) if alto_max and height > alto_max else st.container()
+    with caja:  # listas largas: la gráfica conserva su alto y la caja hace scroll
+        evento = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points",
+                                 key=f"xf_{pagina}_{clave}_{ver}", config=CONFIG_GRAFICA, theme=None)
     try:
         puntos = evento.selection.points or []
     except AttributeError:
