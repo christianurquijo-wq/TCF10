@@ -39,6 +39,9 @@ MAX_GRUPOS_POR_DOCENTE = 3          # simultáneos, sin cruce de horario
 MIN_GESTORES_POR_DOCENTE = 1
 MIN_FRANJAS = 3
 # Franjas oficiales del programa: (nombre, hora de inicio 0-24, etiqueta). Confirmado nov-2026.
+# El SIS guarda la hora de inicio de las sesiones (session_start_date) 5 horas atrás de la hora real de clase
+# (confirmado nov-2026): hora real = hora de BigQuery + 5. Solo afecta la franja de cada grupo.
+DESFASE_HORA_SIS = 5
 FRANJAS = [("Mañana", 8, "8:00 a. m."), ("Tarde", 13, "1:00 p. m."), ("Noche", 17, "5:00 p. m.")]
 
 

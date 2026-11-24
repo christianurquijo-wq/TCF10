@@ -95,10 +95,10 @@ def test_pestana_faltante():
 
 def test_franja_por_hora_de_inicio_mas_comun():
     f = S.franjas_por_grupo(pd.Series(["G1", "G1", "G1", "G2"]),
-                            pd.Series(["2026-11-10 08:00:00", "2026-11-12 08:00:00", "2026-11-14 14:00:00",
-                                       "2026-11-10 17:00:00"])).set_index("grupo")["franja"]
+                            pd.Series(["2026-11-10 03:00:00", "2026-11-12 03:00:00", "2026-11-14 09:00:00",
+                                       "2026-11-10 12:00:00"])).set_index("grupo")["franja"]
     assert f["G1"] == "Mañana · 8:00 a. m." and f["G2"] == "Noche · 5:00 p. m."
-    g = S.franjas_por_grupo(pd.Series(["G3"]), pd.Series(["2026-11-10 13:05:00"])).set_index("grupo")["franja"]
+    g = S.franjas_por_grupo(pd.Series(["G3"]), pd.Series(["2026-11-10 08:05:00"])).set_index("grupo")["franja"]
     assert g["G3"] == "Tarde · 1:00 p. m."
 
 
@@ -169,3 +169,15 @@ def test_consulta_por_estudiante_es_la_fuente_principal():
     # 14/11 16:12 UTC = 11:12 en Bogotá, más reciente que el detalle (10/11)
     assert S.ultima_leccion(t, 101) == ("Feedback 4", pd.Timestamp("2026-11-14 11:12:14"), "Nivel Avanzado")
     assert S.ultima_leccion(t, 102)[0] == "Lección 1"           # sin dato en la consulta: usa el detalle
+
+
+def test_franjas_corrige_desfase_de_bigquery():
+    # BigQuery guarda la hora 5 h atrás: 03:00 → Mañana (8:00), 08:00 → Tarde (13:00), 12:00 → Noche (17:00)
+    import pandas as pd
+    from tcf10 import sis_sheet as S
+    g = pd.Series(["A", "A", "B", "C", "D"])
+    ini = pd.Series(["2026-11-10 03:00:00", "2026-11-11 03:00:00", "2026-11-10 08:00:00",
+                     "2026-11-10 12:00:00", pd.Timestamp("2026-11-10 12:00", tz="UTC")])
+    fr = S.franjas_por_grupo(g, ini).set_index("grupo")["franja"]
+    assert fr["A"].startswith("Mañana") and fr["B"].startswith("Tarde")
+    assert fr["C"].startswith("Noche") and fr["D"].startswith("Noche")

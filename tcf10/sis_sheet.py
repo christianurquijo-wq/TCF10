@@ -31,7 +31,7 @@ COL_PEDAGOGICO = "pedagogical_time"
 PESTANA_EST = ("Consulta por estudiante", "VTD10_student_progress_by_student")
 COLUMNAS_EST = ["incremental", "horas_plataforma_acreditadas", "ultima_fecha_completada", "ultima_leccion",
                 "ultimo_curso", "last_updated_statistics"]
-VERSION = "2026-11-24 sesiones totales y ultima plataforma"  # cambia la llave del caché cuando cambia la preparación
+VERSION = "2026-11-24 franjas +5h"  # cambia la llave del caché cuando cambia la preparación
 # columnas que se conservan de cada pestaña (las demás, incluidos datos personales, se descartan)
 COLUMNAS = {
     "asis_det": ["incremental", "group_name", "session_id", "session_number", "session_date", "attended",
@@ -64,7 +64,7 @@ def _num(s: pd.Series) -> pd.Series:
 _DMY = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}")
 
 
-def _una_fecha(v) -> pd.Timestamp:
+def _una_fecha(v, a_bogota: bool = True) -> pd.Timestamp:
     if v is None or (isinstance(v, float) and pd.isna(v)) or (isinstance(v, str) and not v.strip()):
         return pd.NaT
     try:
@@ -76,11 +76,11 @@ def _una_fecha(v) -> pd.Timestamp:
     except (ValueError, TypeError, OverflowError):
         return pd.NaT
     if ts.tzinfo is not None:  # TIMESTAMP de BigQuery (UTC) → hora de Bogotá, sin zona
-        ts = ts.tz_convert("America/Bogota").tz_localize(None)
+        ts = ts.tz_convert("America/Bogota").tz_localize(None) if a_bogota else ts.tz_localize(None)
     return ts
 
 
-def _fecha(s: pd.Series) -> pd.Series:
+def _fecha(s: pd.Series, a_bogota: bool = True) -> pd.Series:
     """Acepta serial de Sheets, ISO con o sin zona horaria (2026-11-13 08:00:00 UTC) o día/mes/año.
     Los DATETIME del SIS ya vienen en hora de Bogotá; los TIMESTAMP (UTC) se convierten a Bogotá."""
     valores = s.tolist()
@@ -88,7 +88,7 @@ def _fecha(s: pd.Series) -> pd.Series:
     for v in valores:  # las fechas se repiten mucho: se convierte cada valor distinto una sola vez
         k = (type(v), v) if not (isinstance(v, float) and pd.isna(v)) else ("nan",)
         if k not in cache:
-            cache[k] = _una_fecha(v)
+            cache[k] = _una_fecha(v, a_bogota)
     convertidas = [cache[(type(v), v) if not (isinstance(v, float) and pd.isna(v)) else ("nan",)] for v in valores]
     return pd.to_datetime(pd.Series(convertidas, index=s.index, dtype=object),
                           errors="coerce").astype("datetime64[ns]")
@@ -288,8 +288,10 @@ def franja_de_hora(h: float) -> str:
 
 def franjas_por_grupo(grupos: pd.Series, inicios: pd.Series) -> pd.DataFrame:
     """Franja oficial de cada grupo («Mañana · 8:00 a. m.», «Tarde · 1:00 p. m.», «Noche · 5:00 p. m.»), según la
-    hora de inicio más común de sus sesiones (se asigna la franja oficial más cercana)."""
-    ini = _fecha(inicios)
+    hora de inicio más común de sus sesiones (se asigna la franja oficial más cercana).
+    La hora se toma tal como la muestra BigQuery (sin cambio de zona) y se corrige con C.DESFASE_HORA_SIS."""
+    from tcf10 import config as C
+    ini = _fecha(inicios, a_bogota=False) + pd.Timedelta(hours=C.DESFASE_HORA_SIS)
     df = pd.DataFrame({"grupo": grupos.astype("string"), "hora": ini.dt.strftime("%H:%M"),
                        "h": ini.dt.hour + ini.dt.minute / 60})
     df = df.dropna(subset=["grupo", "hora"])
