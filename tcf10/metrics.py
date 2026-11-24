@@ -65,7 +65,7 @@ def preparar(benef: pd.DataFrame, avance: pd.DataFrame, cohortes: pd.DataFrame,
     if "fi_grupo" in df:  # sin base de Atenea: cada persona con el calendario de su grupo
         inicio = pd.to_datetime(df["fi_grupo"]).fillna(inicio)
         fin = pd.to_datetime(df["ff_grupo"]).fillna(fin)
-    for c in ("sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha"):
+    for c in ("sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha", "sesiones_totales"):
         df[c] = pd.to_numeric(df[c], errors="coerce") if c in df else np.nan
     duracion = (fin - inicio).dt.days.clip(lower=1)
     transcurrido = ((hoy - inicio).dt.days / duracion).clip(lower=0, upper=1)
@@ -79,6 +79,7 @@ def preparar(benef: pd.DataFrame, avance: pd.DataFrame, cohortes: pd.DataFrame,
     df["cohorte_cerrada"] = fin < hoy
 
     df["riesgo"] = df.apply(_riesgo, axis=1)
+    df = tipificar(df, hoy)
     df["prob_culminar"] = np.select(
         [df["culmino"], df["riesgo"].isin(C.PROB_CULMINAR)],
         [1.0, df["riesgo"].map(C.PROB_CULMINAR).fillna(0)], default=0.0)
@@ -280,3 +281,63 @@ def alertas_equipo(df: pd.DataFrame) -> list[str]:
         if s.nunique() < C.MIN_FRANJAS:
             msgs.append(f"{coh}: {s.nunique()} franja(s) horaria(s); el contrato pide mínimo {C.MIN_FRANJAS}.")
     return msgs
+
+
+# ------------------------------------------------------------------ tipificación y casos críticos (vista interna)
+def tipificar(df: pd.DataFrame, hoy: pd.Timestamp) -> pd.DataFrame:
+    """Ruta mínima de cada estudiante para llegar al 70 % (63 h) y marca de caso crítico.
+
+    Premisa (Kuepa, nov-2026): con la plataforma al 100 % (58,5 h) faltan 4,5 h sincrónicas; cada clase vale 4 h,
+    así que hacen falta 2 clases en total (8 h → 66,5 h). Por eso:
+      ≥ 2 clases asistidas → «Solo plataforma» · 1 clase → «1 clase + plataforma» · 0 → «2 clases + plataforma».
+    «No alcanza»: le faltan más clases de las que quedan en su grupo, o el grupo ya cerró sin que llegara.
+    «Ya aprobó»: ya tiene 63 h válidas.
+    Columnas nuevas: clases_faltantes, tipo_ruta, faltan_h, faltan_plataforma_h, sesiones_restantes,
+    max_alcanzable_h, sin_plataforma, no_alcanza, critico, motivo_critico.
+    """
+    df = df.copy()
+    sinc, asinc = df["horas_sinc_val"], df["horas_asinc_val"]
+    falta_sinc = (C.HORAS_CULMINACION - C.HORAS_ASINCRONICAS - sinc).clip(lower=0)  # horas con docente mínimas
+    df["clases_faltantes"] = np.ceil(falta_sinc / C.HORAS_POR_SESION - 1e-9).astype(int)
+    restantes = (df["sesiones_totales"] - df["sesiones_a_la_fecha"]).clip(lower=0) \
+        if "sesiones_totales" in df else pd.Series(np.nan, index=df.index)
+    restantes = restantes.where(~df["cohorte_cerrada"], 0)  # grupo cerrado: ya no quedan clases
+    df["sesiones_restantes"] = restantes
+    sinc_max = (sinc + restantes.fillna(np.inf) * C.HORAS_POR_SESION).clip(upper=C.HORAS_SINCRONICAS)
+    df["max_alcanzable_h"] = np.where(restantes.notna(), sinc_max + C.HORAS_ASINCRONICAS, np.nan)
+    df["faltan_h"] = (C.HORAS_CULMINACION - df["horas_validas"]).clip(lower=0).round(1)
+    sinc_meta = (sinc + df["clases_faltantes"] * C.HORAS_POR_SESION).clip(upper=C.HORAS_SINCRONICAS)
+    df["faltan_plataforma_h"] = (C.HORAS_CULMINACION - sinc_meta - asinc).clip(lower=0,
+                                                                              upper=C.HORAS_ASINCRONICAS).round(1)
+    activo = df["enrolado"] & ~df["retirado"] & ~df["culmino"]
+    df["no_alcanza"] = activo & (df["cohorte_cerrada"] | (restantes.notna() & (df["clases_faltantes"] > restantes)))
+    df["tipo_ruta"] = np.select(
+        [df["culmino"], df["no_alcanza"], df["clases_faltantes"] >= 2, df["clases_faltantes"] == 1],
+        ["Ya aprobó", "No alcanza", "2 clases + plataforma", "1 clase + plataforma"], default="Solo plataforma")
+    df.loc[~df["enrolado"] | df["retirado"], "tipo_ruta"] = None
+
+    # Sin uso de plataforma: 0 h con el grupo iniciado hace 7+ días, o 7+ días sin ingresar a la plataforma.
+    en_curso = activo & df["cohorte_iniciada"] & ~df["cohorte_cerrada"]
+    ultima_plat = pd.to_datetime(df["ultima_plataforma"], errors="coerce") if "ultima_plataforma" in df \
+        else pd.Series(pd.NaT, index=df.index)
+    dias_plat = (hoy - ultima_plat).dt.days
+    cero = (df["horas_asinc"] <= 0) & (df["dias_desde_inicio"] >= C.DIAS_SIN_PLATAFORMA)
+    inactivo = dias_plat >= C.DIAS_SIN_PLATAFORMA
+    df["dias_sin_plataforma"] = dias_plat
+    df["sin_plataforma"] = en_curso & (cero | inactivo.fillna(False))
+    # Crítico = aún se puede actuar: grupos en curso (los cerrados quedan como «No alcanza», sin alerta).
+    df["critico"] = df["sin_plataforma"] | (df["no_alcanza"] & ~df["cohorte_cerrada"])
+
+    def motivo(f: pd.Series) -> str:
+        partes = []
+        if f["no_alcanza"]:
+            partes.append(f"su grupo cerró con {f['horas_validas']:.1f} h".replace(".", ",") if f["cohorte_cerrada"]
+                          else f"le faltan {int(f['clases_faltantes'])} clases y quedan {int(f['sesiones_restantes'])}")
+        if f["sin_plataforma"]:
+            if f["horas_asinc"] <= 0:
+                partes.append("0 h en plataforma")
+            elif pd.notna(f["dias_sin_plataforma"]):
+                partes.append(f"{int(f['dias_sin_plataforma'])} días sin entrar a la plataforma")
+        return "; ".join(partes)
+    df["motivo_critico"] = df.apply(motivo, axis=1) if len(df) else pd.Series(dtype=str)
+    return df

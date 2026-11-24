@@ -88,3 +88,17 @@ def agregados_asistencia(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
               - pd.Timedelta(hours=C.REGISTRO_GRACIA_HORAS)).normalize()
     asis.loc[pd.to_datetime(asis["fecha"]) >= limite, "sin_registro"] = 0
     return asis, prog
+
+
+def con_identidad(df: pd.DataFrame) -> pd.DataFrame:
+    """Agrega nombre_completo, tipo_documento y documento (solo detrás de inicio de sesión)."""
+    ident = data.identidades()
+    df = df.drop(columns=[c for c in ("nombre_completo", "tipo_documento", "documento") if c in df])
+    if "huella" in df and "huella" in ident:
+        df = df.merge(ident.drop(columns=[c for c in ("id_sis",) if c in ident]), on="huella", how="left")
+    else:  # demo
+        df = df.merge(ident, on="id_sis", how="left")
+    for c in ("nombre_completo", "documento", "tipo_documento"):
+        if c not in df:
+            df[c] = None
+    return df

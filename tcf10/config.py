@@ -22,6 +22,9 @@ UMBRAL_CULMINACION = 0.70                           # culmina con >= 70 % de las
 HORAS_CULMINACION = HORAS_TOTALES * UMBRAL_CULMINACION  # 63 h
 USUARIOS_PRUEBA = (3172, 2980)  # incremental de cuentas de prueba del SIS (se excluyen de todo)
 HORAS_POR_SESION = 4.0  # horas sincrónicas que acredita cada sesión asistida (confirmado nov-2026)
+DIAS_SIN_PLATAFORMA = 7  # caso crítico: 0 h en plataforma (con el grupo iniciado hace 7+ días) o 7+ días sin ingresar
+# Tipificación de la ruta para llegar al 70 % (63 h) con la plataforma al 100 % (58,5 h): las clases que faltan.
+TIPOS_RUTA = ["No alcanza", "2 clases + plataforma", "1 clase + plataforma", "Solo plataforma", "Ya aprobó"]
 
 PERFILES = {
     "Oficinista General": "Marketing digital, finanzas e IA (CUOC 41101)",

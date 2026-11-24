@@ -31,7 +31,7 @@ COL_PEDAGOGICO = "pedagogical_time"
 PESTANA_EST = ("Consulta por estudiante", "VTD10_student_progress_by_student")
 COLUMNAS_EST = ["incremental", "horas_plataforma_acreditadas", "ultima_fecha_completada", "ultima_leccion",
                 "ultimo_curso", "last_updated_statistics"]
-VERSION = "2026-11-20 4 h por sesion + diagnostico"  # cambia la llave del caché cuando cambia la preparación
+VERSION = "2026-11-24 sesiones totales y ultima plataforma"  # cambia la llave del caché cuando cambia la preparación
 # columnas que se conservan de cada pestaña (las demás, incluidos datos personales, se descartan)
 COLUMNAS = {
     "asis_det": ["incremental", "group_name", "session_id", "session_number", "session_date", "attended",
@@ -319,6 +319,7 @@ def avance(t: dict[str, pd.DataFrame], ids, horas_sesion: float, divisor_tiempo:
     asis = ar.groupby("id_sis").agg(sesiones_asistidas=("attended_sessions", "sum"),
                                     sesiones_inasistidas=("not_attended_sessions", "sum"),
                                     sesiones_a_la_fecha=("total_sessions_to_date", "sum"),
+                                    sesiones_totales=("total_sessions", "sum"),
                                     ultima_asistencia=("last_attendance_date", "max"))
     grupo = (ar.sort_values("total_sessions", ascending=False).dropna(subset=["group_name"])
                .drop_duplicates("id_sis").set_index("id_sis")["group_name"].rename("grupo_sis"))
@@ -337,16 +338,18 @@ def avance(t: dict[str, pd.DataFrame], ids, horas_sesion: float, divisor_tiempo:
     if df.empty:
         return pd.DataFrame(columns=["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis",
                                      "actualizado_sis", "sesiones_asistidas", "sesiones_registradas",
-                                     "sesiones_a_la_fecha"])
+                                     "sesiones_a_la_fecha", "sesiones_totales", "ultima_plataforma"])
     df["horas_sinc"] = (df["sesiones_asistidas"].fillna(0) * horas_sesion).round(2)
     df["horas_asinc"] = df["horas_asinc"].fillna(0).round(2)
     df["ultima_actividad"] = df[["ultima_asistencia", "ultimo_completado", "ultimo_ingreso"]].max(axis=1)
+    df["ultima_plataforma"] = df[["ultimo_completado", "ultimo_ingreso"]].max(axis=1)  # sin contar clases
     df["actualizado_sis"] = actualizado(t)
     df["sesiones_asistidas"] = df["sesiones_asistidas"].fillna(0)
     df["sesiones_registradas"] = df["sesiones_asistidas"] + df["sesiones_inasistidas"].fillna(0)
     df["sesiones_a_la_fecha"] = df["sesiones_a_la_fecha"].fillna(0)
     return df[["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis", "actualizado_sis",
-               "sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha"]]
+               "sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha", "sesiones_totales",
+               "ultima_plataforma"]]
 
 
 def calendario_grupos(t: dict[str, pd.DataFrame]) -> pd.DataFrame:

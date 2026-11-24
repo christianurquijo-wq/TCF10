@@ -74,6 +74,10 @@ if len(base) == 1:
             "Horas válidas": f"{ui.num(f['horas_validas'], 1)} de {ui.num(C.HORAS_CULMINACION)} h para culminar",
             "Sesiones": (f"asistió a {int(f['sesiones_asistidas'])} de {int(f['sesiones_registradas'])} registradas"
                          if pd.notna(f.get("sesiones_registradas")) else "–"),
+            "Ruta al 70 %": (f"{f['tipo_ruta']} · faltan {ui.num(f['faltan_h'], 1)} h "
+                             f"({ui.num(f['faltan_plataforma_h'], 1)} h en plataforma)"
+                             if f.get("tipo_ruta") and f.get("tipo_ruta") != "Ya aprobó" else (f.get("tipo_ruta") or "–")),
+            "Caso crítico": f.get("motivo_critico") or "No",
             "Última actividad": ui.fecha_corta(f.get("ultima_actividad")),
             "Días sin actividad": ui.num(f.get("dias_sin_actividad")),
         }
@@ -89,7 +93,8 @@ base["id_sis_v"] = base["id_sis"].where(base["id_sis"] > 0)
 base["_orden"] = base["riesgo"].map({"Alto": 0, "Medio": 1, "Bajo": 2, "Culminó": 3}).fillna(4)
 vista = base.sort_values(["_orden", "horas_validas"])[
     ["id_sis_v", "persona", "cohorte", "grupo", "franja", "estado", "horas_sinc_val", "horas_asinc_val",
-     "horas_validas", "sesiones_asistidas", "sesiones_registradas", "ultima_actividad", "riesgo", "motivo"]]
+     "horas_validas", "tipo_ruta", "faltan_h", "sesiones_asistidas", "sesiones_registradas", "ultima_actividad",
+     "riesgo", "motivo"]]
 st.dataframe(
     vista, hide_index=True, width="stretch", height=480,
     column_config={
@@ -99,6 +104,7 @@ st.dataframe(
         "horas_asinc_val": st.column_config.NumberColumn("Asincrónicas (h)", format="%.1f"),
         "horas_validas": st.column_config.ProgressColumn("Horas válidas", format="%.1f", min_value=0,
                                                          max_value=C.HORAS_CULMINACION),
+        "tipo_ruta": "Ruta al 70 %", "faltan_h": st.column_config.NumberColumn("Faltan (h)", format="%.1f"),
         "sesiones_asistidas": st.column_config.NumberColumn("Asistió", format="%d"),
         "sesiones_registradas": st.column_config.NumberColumn("Registradas", format="%d"),
         "ultima_actividad": st.column_config.DateColumn("Última actividad", format="DD/MM/YYYY"),

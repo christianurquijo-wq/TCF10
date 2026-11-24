@@ -15,7 +15,7 @@ if form.empty:
     st.info("No hay participantes en formación para este filtro.")
     st.stop()
 
-c = st.columns(4)
+c = estilo.fila(4, "prog")
 with c[0]:
     estilo.kpi("Horas válidas promedio", ui.num(form["horas_validas"].mean(), 1),
                f"de {ui.num(C.HORAS_CULMINACION)} h para culminar", "azul")

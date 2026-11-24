@@ -35,6 +35,8 @@ h1, h2, h3 {font-family:'Barlow Semi Condensed', sans-serif; color:#141439;}
 .banda-titulo {font-family:'Barlow Semi Condensed', sans-serif; font-size:2.3rem; font-weight:700; color:#fff;
                line-height:1.05; margin:2px 0 4px 0;}
 .banda-bajada {color:#B7D9E6; font-size:.95rem;}
+.banda-interna {background:#E55B0E; color:#fff; border-radius:6px; padding:2px 8px; margin-right:6px;
+                letter-spacing:.08em;}
 .banda-lado {display:flex; flex-direction:column; align-items:flex-end; gap:10px; flex-shrink:0;}
 @media (max-width: 640px) {.banda-lado {flex-direction:row; align-items:center; flex-wrap:wrap;}}
 .banda-fecha {display:inline-block; background:#05247D; color:#fff; border-radius:20px; padding:4px 12px;
@@ -96,9 +98,11 @@ def css() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
 
 
-def banda_html(fecha: str) -> str:
+def banda_html(fecha: str, interna: bool = False) -> str:
+    ceja = ("<span class='banda-interna'>Vista interna</span> Gestión del contrato · Kuepa EduTech" if interna
+            else "Informe de seguimiento · Operador Kuepa EduTech")
     return (f"<div style='display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap'>"
-            f"<div><div class='banda-eyebrow'>Informe de seguimiento · Operador Kuepa EduTech</div>"
+            f"<div><div class='banda-eyebrow'>{ceja}</div>"
             f"<div class='banda-titulo'>Talento Capital · Formación 10</div>"
             f"<div class='banda-bajada'>Contrato ATENEA-497-2026 · Formación en Marketing digital y finanzas, y "
             f"Auxiliar de información y servicio al cliente, con enfoque en Inteligencia Artificial</div></div>"

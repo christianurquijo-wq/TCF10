@@ -109,6 +109,8 @@ def limpiar_avance(crudo: pd.DataFrame) -> pd.DataFrame:
     df = crudo.copy()
     df["id_sis"] = pd.to_numeric(df["id_sis"], errors="coerce").astype("Int64")
     df["ultima_actividad"] = pd.to_datetime(df["ultima_actividad"], errors="coerce")
+    df["ultima_plataforma"] = pd.to_datetime(df["ultima_plataforma"], errors="coerce") if "ultima_plataforma" in df \
+        else pd.Series(pd.NaT, index=df.index)
     df.loc[df["ultima_actividad"].dt.year < 2000, "ultima_actividad"] = pd.NaT  # sin actividad (1970 en el SQL)
     for c in ("horas_sinc", "horas_asinc"):
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
@@ -119,10 +121,11 @@ def limpiar_avance(crudo: pd.DataFrame) -> pd.DataFrame:
     if "sesiones_registradas" not in df and "sesiones_sin_registro" in df:  # consulta de BigQuery
         df["sesiones_registradas"] = (pd.to_numeric(df["sesiones_a_la_fecha"], errors="coerce")
                                       - pd.to_numeric(df["sesiones_sin_registro"], errors="coerce"))
-    for c in ("sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha"):
+    for c in ("sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha", "sesiones_totales"):
         df[c] = pd.to_numeric(df[c], errors="coerce") if c in df else float("nan")
     return df[["id_sis", "horas_sinc", "horas_asinc", "ultima_actividad", "grupo_sis", "actualizado_sis",
-               "sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha"]]
+               "sesiones_asistidas", "sesiones_registradas", "sesiones_a_la_fecha", "sesiones_totales",
+               "ultima_plataforma"]]
 
 
 # ------------------------------------------------------------------ fuentes

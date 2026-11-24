@@ -94,3 +94,62 @@ def test_riesgo_fase_inicial_por_asistencia():
     assert M._riesgo(f) == "Medio"
     f = pd.Series({**base, "sesiones_registradas": 4, "sesiones_asistidas": 3, "horas_asinc": 0})
     assert M._riesgo(f) == "Bajo"   # ritmo bajo no cuenta en la fase inicial
+
+
+def _persona(i, sinc_clases, asinc, a_la_fecha, totales, ult_plat, inicio="2026-11-01", fin="2026-12-30"):
+    benef = {"id_sis": i, "documento": str(i), "nombre": "X", "cohorte": "Cohorte 1", "poblacion": "Abierta",
+             "perfil": "Auxiliar", "nivel": "A1", "grupo": "G1", "docente": "D1", "gestor": "Ge1",
+             "franja": "Mañana", "enrolado": True, "estado": "Activo", "lab_inicio": "", "certificado": None,
+             "formal_t3": None}
+    av = {"id_sis": i, "horas_sinc": sinc_clases * C.HORAS_POR_SESION, "horas_asinc": asinc,
+          "sesiones_asistidas": sinc_clases, "sesiones_registradas": a_la_fecha, "sesiones_a_la_fecha": a_la_fecha,
+          "sesiones_totales": totales, "ultima_plataforma": pd.Timestamp(ult_plat) if ult_plat else pd.NaT,
+          "ultima_actividad": pd.Timestamp("2026-11-12")}
+    return benef, av
+
+
+def _tipificados(personas, hoy="2026-11-20", fin="2026-12-30"):
+    b, a = zip(*personas)
+    coh = pd.DataFrame([{"cohorte": "Cohorte 1", "fecha_inicio": pd.Timestamp("2026-11-01"),
+                         "fecha_fin": pd.Timestamp(fin), "tipo": "Cerrada"}])
+    return M.preparar(pd.DataFrame(b), pd.DataFrame(a), coh, pd.Timestamp(hoy)).set_index("id_sis")
+
+
+def test_tipificacion_por_clases_asistidas():
+    df = _tipificados([_persona(1, 2, 10, 4, 15, "2026-11-19"),     # 8 h: con plataforma al 100 % llega
+                       _persona(2, 1, 10, 4, 15, "2026-11-19"),     # 4 h + 58,5 = 62,5: le falta 1 clase
+                       _persona(3, 0, 10, 4, 15, "2026-11-19"),     # 0 clases: le faltan 2
+                       _persona(4, 0, 10, 14, 15, "2026-11-19"),    # le faltan 2 y solo queda 1 clase
+                       _persona(5, 8, 58.5, 10, 15, "2026-11-19")]) # 32 h (31,5 tope) + 58,5 → ya aprobó
+    assert df.loc[1, "tipo_ruta"] == "Solo plataforma" and df.loc[1, "clases_faltantes"] == 0
+    assert df.loc[2, "tipo_ruta"] == "1 clase + plataforma"
+    assert df.loc[3, "tipo_ruta"] == "2 clases + plataforma"
+    assert df.loc[4, "tipo_ruta"] == "No alcanza" and bool(df.loc[4, "critico"])
+    assert df.loc[5, "tipo_ruta"] == "Ya aprobó" and df.loc[5, "faltan_h"] == 0
+    # horas: persona 1 tiene 8 + 10 = 18 h → faltan 45; en plataforma le faltan 63 - 8 - 10 = 45
+    assert df.loc[1, "faltan_h"] == pytest.approx(45) and df.loc[1, "faltan_plataforma_h"] == pytest.approx(45)
+    # persona 3: con las 2 clases (8 h) le faltan 63 - 8 - 10 = 45 h de plataforma
+    assert df.loc[3, "faltan_plataforma_h"] == pytest.approx(45)
+
+
+def test_sin_uso_de_plataforma():
+    df = _tipificados([_persona(1, 1, 0, 3, 15, None),               # 0 h y el grupo inició hace 19 días
+                       _persona(2, 1, 6, 3, 15, "2026-11-10"),       # 10 días sin entrar
+                       _persona(3, 1, 6, 3, 15, "2026-11-18")])      # activo
+    assert bool(df.loc[1, "sin_plataforma"]) and "0 h en plataforma" in df.loc[1, "motivo_critico"]
+    assert bool(df.loc[2, "sin_plataforma"]) and "10 días" in df.loc[2, "motivo_critico"]
+    assert not bool(df.loc[3, "critico"])
+
+
+def test_grupo_cerrado_sin_aprobar_no_alcanza():
+    df = _tipificados([_persona(1, 2, 20, 15, 15, "2026-11-19")], hoy="2027-01-05")
+    assert df.loc[1, "tipo_ruta"] == "No alcanza"
+
+
+def test_vista_interna_solo_para_correos_listados(monkeypatch):
+    from vista_atenea import acceso
+    monkeypatch.setattr(acceso, "_cfg", lambda: {"internos": ["Christian.Urquijo@kuepa.com"]})
+    assert acceso.es_interno({"nombre": "christian.urquijo@kuepa.com", "via": "google"})
+    assert not acceso.es_interno({"nombre": "otra@kuepa.com", "via": "google"})
+    assert not acceso.es_interno({"nombre": "christian.urquijo@kuepa.com", "via": "usuario"})
+    assert not acceso.es_interno(None)

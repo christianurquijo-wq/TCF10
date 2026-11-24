@@ -100,6 +100,9 @@ def acceso_restringido(seccion: str = "tcf10", dominios_def=("kuepa.com",)) -> s
     En modo demo no se pide (los datos son sintéticos)."""
     if data.modo_demo():
         return ""
+    # App unificada: quien entró a la vista interna ya pasó el control de acceso (correo en [atenea] internos).
+    if st.session_state.get("vista") == "interna" and st.session_state.get("interno_ok"):
+        return st.session_state.get("interno_correo", "")
     # Modo pruebas: `sin_login = true` en [tcf10] (consulta interna) o en [atenea] (vista Atenea) apaga el
     # inicio de sesión SIN tocar el código. Mientras esté activo, cualquiera con el enlace ve nombres/documentos.
     try:

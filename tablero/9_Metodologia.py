@@ -54,6 +54,21 @@ st.markdown("""
   (supuesto ajustable en `tcf10/config.py`).
 """)
 
+st.subheader("Ruta al 70 % y casos críticos")
+st.markdown(f"""
+- **Meta:** {ui.num(C.HORAS_CULMINACION)} h válidas (70 % de {ui.num(C.HORAS_TOTALES)} h). Con la plataforma al 100 %
+  ({ui.num(C.HORAS_ASINCRONICAS, 1)} h) faltan {ui.num(C.HORAS_CULMINACION - C.HORAS_ASINCRONICAS, 1)} h con docente;
+  cada clase asistida vale {ui.num(C.HORAS_POR_SESION)} h, así que se necesitan **2 clases** en total.
+- **Ruta:** con 2 o más clases → *Solo plataforma*; con 1 → *1 clase + plataforma*; sin clases → *2 clases +
+  plataforma*. *No alcanza*: le faltan más clases de las que quedan en su grupo (o el grupo cerró sin llegar).
+  *Ya aprobó*: ya tiene {ui.num(C.HORAS_CULMINACION)} h.
+- **Faltan (h):** {ui.num(C.HORAS_CULMINACION)} h menos sus horas válidas. **En plataforma (h):** lo que debe
+  completar en plataforma si asiste solo a las clases mínimas de su ruta.
+- **Caso crítico** (solo grupos en curso): 0 h en plataforma con el grupo iniciado hace {C.DIAS_SIN_PLATAFORMA}+ días,
+  {C.DIAS_SIN_PLATAFORMA}+ días sin entrar a la plataforma, o *No alcanza*.
+""")
+
 st.subheader("Datos personales")
-st.markdown("La app es pública (cualquiera con el enlace): nunca muestra nombres completos, documentos, correos ni "
-            "teléfonos. Las listas de seguimiento usan el ID SIS y las iniciales.")
+st.markdown("La vista interna solo la ven los correos autorizados en `[atenea] internos` (con Google). La página "
+            "«Grupos y casos críticos» muestra nombre y documento para poder contactar a cada estudiante; el resto "
+            "de páginas internas usa ID SIS e iniciales.")

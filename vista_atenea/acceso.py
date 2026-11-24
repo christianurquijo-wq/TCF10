@@ -6,6 +6,8 @@ Secrets:
     correos = []                                       # correos sueltos autorizados con Google
     sin_login = false                                  # true = sin pantalla de ingreso (solo pruebas internas)
 
+    internos = ["persona@kuepa.com"]                   # correos (Google) que ven el botón «Vista interna»
+
     [atenea.usuarios.prueba]                           # una sección por usuario (genera el hash con
     nombre = "Usuario de prueba Atenea"                # python scripts/crear_usuario_atenea.py)
     hash = "pbkdf2_sha256$200000$<sal>$<hash>"
@@ -79,6 +81,19 @@ def sesion_actual() -> dict | None:
     return None
 
 
+def es_interno(s: dict | None) -> bool:
+    """¿Puede cambiar a la vista interna? Solo correos de Google listados en [atenea] internos (los usuarios de
+    usuario/contraseña nunca). En modo demo sí, para probar con datos sintéticos."""
+    if not s:
+        return False
+    if s.get("via") == "demo":
+        return True
+    if s.get("via") != "google":
+        return False
+    internos = {c.strip().lower() for c in _cfg().get("internos", [])}
+    return str(s.get("nombre", "")).lower() in internos
+
+
 def pantalla_ingreso() -> None:
     """Dibuja la pantalla de ingreso y detiene la página."""
     if _hay_oauth() and st.user.is_logged_in:
@@ -94,6 +109,7 @@ def aviso_modo(s: dict) -> None:
 
 
 def cerrar_sesion(s: dict) -> None:
+    st.session_state.pop("vista", None)
     if s.get("via") == "google":
         st.logout()
     st.session_state.pop("at_usuario", None)

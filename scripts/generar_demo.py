@@ -4,7 +4,7 @@ Genera los datos de DEMOSTRACIÓN de data/demo/ (sintéticos, sin personas reale
     python scripts/generar_demo.py
 
 Simula las 3 cohortes con la estructura que tendrá el Sheet real: C1 en curso cerca del cierre,
-C2 recién iniciada y C3 por iniciar. Incluye a propósito un grupo con más de 30 activos y un docente
+C2 recién iniciada y C3 por iniciar. Incluye a propósito un grupo por encima del máximo de activos y un docente
 con 4 grupos simultáneos para que se vean las alertas del equipo.
 """
 from __future__ import annotations
@@ -42,7 +42,7 @@ def main() -> None:
             tam = min(restantes, int(rng.integers(26, 31)))
             grupo_n += 1
             if coh == "Cohorte 1" and grupo_n == 3:
-                tam = 36  # demo: grupo por encima de 30
+                tam = 42  # demo: grupo por encima del máximo (35)
             if (grupo_n - 1) % 3 == 0:
                 docente_n += 1
             docente = f"Docente {docente_n:02d}"
