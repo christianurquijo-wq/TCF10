@@ -132,11 +132,17 @@ def limpiar(crudo: pd.DataFrame, huella_a_id: dict[str, int]) -> pd.DataFrame:
 def calendario(benef: pd.DataFrame, grupos_sis: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """La base no trae fechas: cada persona toma grupo y calendario de su grupo en el SIS, y cada cohorte va
     del primer inicio al último fin de sus grupos. grupos_sis: id_sis, grupo, fecha_inicio, fecha_fin."""
-    g = grupos_sis.drop_duplicates("id_sis").set_index("id_sis")
+    g = grupos_sis.dropna(subset=["id_sis"]).drop_duplicates("id_sis")
+    g = {int(k): v for k, v in zip(g["id_sis"], zip(g["grupo"], g["fecha_inicio"], g["fecha_fin"]))}
     b = benef.copy()
-    b["grupo"] = b["id_sis"].map(g["grupo"]).fillna(b["grupo"])
-    b["fi_grupo"] = pd.to_datetime(b["id_sis"].map(g["fecha_inicio"]), errors="coerce")
-    b["ff_grupo"] = pd.to_datetime(b["id_sis"].map(g["fecha_fin"]), errors="coerce")
+    # Diccionarios en vez de map(): según la versión de pandas, map() sobre un ID «Int64» sin coincidencias devolvía
+    # una columna numérica y luego no aceptaba texto (TypeError «Invalid value … for dtype Int64»).
+    ids = [int(i) if pd.notna(i) else None for i in b["id_sis"]]
+    b["grupo"] = [g[i][0] if i in g and pd.notna(g[i][0]) else actual for i, actual in zip(ids, b["grupo"])]
+    b["fi_grupo"] = pd.to_datetime(pd.Series([g[i][1] if i in g else None for i in ids], index=b.index),
+                                   errors="coerce")
+    b["ff_grupo"] = pd.to_datetime(pd.Series([g[i][2] if i in g else None for i in ids], index=b.index),
+                                   errors="coerce")
     coh = (b[b["enrolado"]].groupby("cohorte", as_index=False)
              .agg(fecha_inicio=("fi_grupo", "min"), fecha_fin=("ff_grupo", "max")))
     faltan = sorted(set(b["cohorte"]) - set(coh["cohorte"]))

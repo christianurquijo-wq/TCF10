@@ -642,9 +642,13 @@ def _agregados_demo(ids: tuple[int, ...]) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 def _completar_grupo(benef: pd.DataFrame, avance: pd.DataFrame) -> pd.DataFrame:
     """El Sheet manda; si el grupo viene vacío se usa el grupo principal del SIS."""
-    grupos = avance.dropna(subset=["grupo_sis"]).set_index("id_sis")["grupo_sis"]
+    grupos = avance.dropna(subset=["grupo_sis"]).set_index("id_sis")["grupo_sis"].astype(str)
+    grupos = grupos[~grupos.index.duplicated()].to_dict()
     vacio = benef["grupo"].eq("Sin dato")
-    benef.loc[vacio, "grupo"] = benef.loc[vacio, "id_sis"].map(grupos).fillna("Sin dato")
+    # Diccionario + texto: con pandas 2.x, map() sobre un ID «Int64» devolvía «Int64» cuando ninguna persona del
+    # filtro tenía grupo en el SIS, y fillna("Sin dato") fallaba («Invalid value 'Sin dato' for dtype Int64»).
+    benef.loc[vacio, "grupo"] = [grupos.get(int(i), "Sin dato") if pd.notna(i) else "Sin dato"
+                                 for i in benef.loc[vacio, "id_sis"]]
     return benef
 
 
