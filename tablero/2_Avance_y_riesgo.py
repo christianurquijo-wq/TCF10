@@ -54,7 +54,7 @@ with t_graf:
         for r in ["Alto", "Medio", "Bajo"]:
             fig.add_bar(y=orden.index, x=orden[r], name=r, orientation="h", marker_color=ui.COLOR_RIESGO[r],
                         hovertemplate=f"%{{y}} · {r}: %{{x}}<extra></extra>")
-        fig.update_layout(barmode="stack", yaxis=dict(title=None, range=[-.6, len(orden) - .4]), xaxis_title=None,
+        fig.update_layout(barmode="stack", yaxis=dict(title=None, range=ui.rango_categorias(orden.index)), xaxis_title=None,
                           separators=",.")
         ui.grafica(fig, "av", "grupos", {"y": "grupo", "trace": "riesgo"}, ui.alto_barras(len(orden)), alto_max=380)
 

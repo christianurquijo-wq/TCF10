@@ -339,6 +339,11 @@ def linea_meta(fig, valor: float, texto: str, eje: str = "x", color: str = NOCHE
                     hoverinfo="skip")
 
 
+def rango_categorias(categorias) -> list[float]:
+    """Rango del eje de categorías sin espacio vacío (Plotly agrega relleno si hay marcadores o textos)."""
+    return [-.6, pd.Series(list(categorias)).nunique() - .4]
+
+
 def alto_barras(n: int, por_barra: int = 26, minimo: int = 220) -> int:
     """Alto de una gráfica de barras horizontales para que cada barra se lea (la caja hace scroll si es larga)."""
     return max(minimo, 70 + por_barra * int(n))

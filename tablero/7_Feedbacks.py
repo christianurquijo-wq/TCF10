@@ -94,7 +94,7 @@ with t_graf:
                         marker=dict(symbol="line-ns-open", size=16, color=ui.NOCHE, line=dict(width=3, color=ui.NOCHE)),
                         hovertemplate="%{y}: meta %{x:.0f}<extra></extra>")
     fig.update_layout(xaxis=dict(title=None, range=[0, TOT + .8], dtick=1),
-                      yaxis=dict(title=None, range=[-.6, len(orden) - .4]), separators=",.", bargap=.25)
+                      yaxis=dict(title=None, range=ui.rango_categorias(orden["grupo"])), separators=",.", bargap=.25)
     ui.grafica(fig, "fb", "grupos", {"y": "grupo"}, ui.alto_barras(len(orden)), alto_max=480, leyenda=False)
     st.caption("Barra: promedio de Feedbacks completados · línea negra: meta a hoy · verde ≥ 90 % de la meta, "
                "naranja 60–89 %, rojo < 60 %. Desliza dentro del recuadro para ver todos los grupos.")

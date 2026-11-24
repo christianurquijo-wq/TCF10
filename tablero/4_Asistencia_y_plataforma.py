@@ -114,7 +114,7 @@ with t_grupos:
             marker_color=[ui.ROJO if v < .6 else ui.NARANJA if v < .8 else ui.VERDE for v in orden["asistencia"]],
             hovertemplate="%{y}: %{x:.0%}<extra></extra>"))
         fig.update_layout(xaxis=dict(tickformat=".0%", range=[0, 1.15], title=None),
-                          yaxis=dict(title=None, range=[-.6, len(orden) - .4]))
+                          yaxis=dict(title=None, range=ui.rango_categorias(orden["grupo"])))
         ui.grafica(fig, "ap", "menor", {"y": "grupo"}, ui.alto_barras(len(orden)), alto_max=460)
     with der:
         g = por_grupo[por_grupo["sin_registro"] > 0].sort_values("sin_registro", ascending=False)
@@ -127,7 +127,7 @@ with t_grupos:
             fig = go.Figure(go.Bar(x=orden["sin_registro"], y=orden["grupo"], orientation="h",
                                    text=orden["sin_registro"], textposition="outside", marker_color=ui.AMARILLO,
                                    name="Sin registro", hovertemplate="%{y}: %{x} cupos sin registro<extra></extra>"))
-            fig.update_layout(xaxis_title=None, yaxis=dict(title=None, range=[-.6, len(orden) - .4]),
+            fig.update_layout(xaxis_title=None, yaxis=dict(title=None, range=ui.rango_categorias(orden["grupo"])),
                               xaxis=dict(range=[0, orden["sin_registro"].max() * 1.2]))
             ui.grafica(fig, "ap", "sinreg", {"y": "grupo"}, ui.alto_barras(len(orden)), alto_max=460)
             st.caption("Cupos de sesión sin registro del docente: esas horas no cuentan para la culminación (63 h).")

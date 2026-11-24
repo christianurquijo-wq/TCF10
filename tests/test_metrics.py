@@ -176,3 +176,14 @@ def test_feedback_meta_por_clase_y_critico():
     assert "3 feedbacks pendientes (lleva 1 de 4)" in r.loc[2, "motivo_critico"]
     assert not r.loc[1, "critico"] and r.loc[3, "estado_feedback"] == "Aún no aplica"
     assert pd.isna(r.loc[4, "feedbacks_meta"]) and not r.loc[4, "critico"]  # retirado: fuera del seguimiento
+
+
+def test_grupos_una_fila_por_grupo_aunque_falten_datos():
+    import pandas as pd
+    from tcf10 import metrics as M
+    df = pd.DataFrame({"cohorte": ["C1"] * 4, "grupo": ["G1"] * 4, "perfil": ["A", "A", "Sin dato", "A"],
+                       "nivel": "N", "docente": ["D1", "D1", "Sin dato", "D1"], "gestor": "X", "franja": "Mañana",
+                       "id_sis": [1, 2, 3, 4], "estado": "Activo", "culmino": False, "horas_validas": 1.0,
+                       "riesgo": "Bajo", "enrolado": True, "retirado": False})
+    g = M.grupos(df)
+    assert len(g) == 1 and g.iloc[0]["docente"] == "D1" and g.iloc[0]["integrantes"] == 4

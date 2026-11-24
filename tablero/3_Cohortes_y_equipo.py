@@ -33,6 +33,8 @@ t_grupos, t_doc, t_coh, t_alertas = ui.pestanas(["Grupos", "Docentes", "Cohortes
 
 with t_grupos:
     g = M.grupos(sel).sort_values("activos", ascending=False)
+    if g["grupo"].duplicated().any():  # mismo nombre de grupo en dos cohortes: se distinguen en la gráfica
+        g["grupo"] = g["grupo"].where(~g["grupo"].duplicated(keep=False), g["grupo"] + " · " + g["cohorte"])
     st.markdown(f"**Activos por grupo** · {ui.num(len(g))} grupos, los más grandes arriba")
     orden = g.iloc[::-1]
     fig = go.Figure(go.Bar(
@@ -40,7 +42,7 @@ with t_grupos:
         marker_color=[ui.ROJO if e else ui.AZUL for e in orden["excede_maximo"]],
         hovertemplate="%{y}: %{x} activos<extra></extra>", name="Activos"))
     ui.linea_meta(fig, C.MAX_ACTIVOS_POR_GRUPO, f"Máximo {C.MAX_ACTIVOS_POR_GRUPO}", color=ui.NARANJA)
-    fig.update_layout(yaxis=dict(title=None, range=[-.6, len(orden) - .4]), xaxis_title=None,
+    fig.update_layout(yaxis=dict(title=None, range=ui.rango_categorias(orden["grupo"])), xaxis_title=None,
                       xaxis=dict(range=[0, max(C.MAX_ACTIVOS_POR_GRUPO, int(g["activos"].max() or 0)) * 1.15]))
     ui.grafica(fig, "eq", "grupos", {"y": "grupo"}, ui.alto_barras(len(orden)), alto_max=440)
     st.caption("Rojo: el grupo supera el máximo de activos. Toca un grupo para ver su detalle y su docente.")

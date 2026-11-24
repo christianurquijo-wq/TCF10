@@ -107,7 +107,7 @@ with t_graf:
                 fig.add_bar(y=orden["grupo"], x=orden[col_], name=nombre, orientation="h", marker_color=color,
                             hovertemplate=f"%{{y}} · {nombre}: %{{x}}<extra></extra>")
             fig.update_layout(barmode="stack", xaxis_title=None, separators=",.",
-                              yaxis=dict(title=None, range=[-.6, len(orden) - .4]))
+                              yaxis=dict(title=None, range=ui.rango_categorias(orden["grupo"])))
             ui.grafica(fig, "gc", "grupos", {"y": "grupo"}, ui.alto_barras(len(orden)), alto_max=420)
             st.caption("Toca un grupo para ver solo sus estudiantes.")
 

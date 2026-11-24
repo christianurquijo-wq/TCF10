@@ -244,9 +244,19 @@ def activos(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def grupos(df: pd.DataFrame) -> pd.DataFrame:
+    """Una fila por grupo. nov-2026: antes se agrupaba también por perfil, nivel, docente, gestor y franja; si los
+    estudiantes de un mismo grupo tenían algún dato distinto o «Sin dato», el grupo salía partido en varias filas
+    (102 filas para 64 grupos), con los activos repartidos y la alerta de > 35 activos mal calculada. Ahora esos datos
+    toman el valor más frecuente del grupo (ignorando «Sin dato»)."""
     base = df[df["enrolado"] & ~df["retirado"]]
-    g = base.groupby(["cohorte", "grupo", "perfil", "nivel", "docente", "gestor", "franja"], dropna=False).agg(
-        integrantes=("id_sis", "size"),
+
+    def moda(s: pd.Series):
+        v = s.dropna().astype(str)
+        v = v[v.ne("Sin dato")]
+        return v.mode().iloc[0] if len(v) else "Sin dato"
+    g = base.groupby(["cohorte", "grupo"], dropna=False).agg(
+        perfil=("perfil", moda), nivel=("nivel", moda), docente=("docente", moda), gestor=("gestor", moda),
+        franja=("franja", moda), integrantes=("id_sis", "size"),
         activos=("estado", lambda s: int(s.isin(C.ESTADOS_ACTIVOS).sum())),
         culminados=("culmino", "sum"), horas_promedio=("horas_validas", "mean"),
         riesgo_alto=("riesgo", lambda s: int(s.eq("Alto").sum()))).reset_index()
