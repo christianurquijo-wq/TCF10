@@ -195,7 +195,7 @@ def iniciales(nombre: str) -> str:
     return "".join(p[0].upper() + "." for p in partes[:4]) or "–"
 
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=data.TTL, show_spinner="Cargando datos…")
 def _preparado(hoy: pd.Timestamp, version: str = "") -> tuple[pd.DataFrame, bool]:  # version: solo llave del caché
     benef, avance, cohortes, demo = data.cargar()
     return metrics.preparar(benef, avance, cohortes, hoy), demo
@@ -224,6 +224,11 @@ def datos() -> pd.DataFrame:
 def refrescar() -> None:
     data.refrescar()
     _preparado.clear()
+    try:
+        from vista_atenea import comun
+        comun._todos.clear()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def filtros(df: pd.DataFrame, clave: str, columnas=("cohorte", "perfil", "nivel")) -> pd.DataFrame:

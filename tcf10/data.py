@@ -129,6 +129,18 @@ def limpiar_avance(crudo: pd.DataFrame) -> pd.DataFrame:
 
 
 # ------------------------------------------------------------------ fuentes
+def _ttl_cache() -> int:
+    """Segundos que se guardan en memoria los datos leídos (BigQuery / Sheets). Por defecto 6 h: el SIS se actualiza
+    una vez al día y el botón «Actualizar» fuerza una lectura nueva. Ajustable con [tcf10] cache_minutos."""
+    try:
+        return int(float(st.secrets.get("tcf10", {}).get("cache_minutos", 360)) * 60)
+    except Exception:  # noqa: BLE001 -- sin secrets (demo / tests)
+        return 360 * 60
+
+
+TTL = _ttl_cache()
+
+
 class ErrorConfiguracion(Exception):
     """Error de datos o de Secrets que la app muestra en pantalla en lugar de un traceback."""
 
@@ -234,7 +246,7 @@ def _esquema_sis() -> str:
                              _cfg().get("sis_dataset"))).encode()).hexdigest()[:8]
 
 
-@st.cache_data(ttl=900, show_spinner="Cargando datos…")
+@st.cache_data(ttl=TTL, show_spinner="Cargando datos…")
 def _sis_sheet(esquema: str = "") -> dict[str, pd.DataFrame]:
     """Tablas del SIS (vistas VTD10) livianas y sin datos personales (solo ID SIS e iniciales).
 
@@ -307,7 +319,7 @@ def _seccion_bq() -> str:
         return "gcp_service_account"
 
 
-@st.cache_data(ttl=900, show_spinner="Cargando datos…")
+@st.cache_data(ttl=TTL, show_spinner="Cargando datos…")
 def _leer_sheet(pestana: str) -> pd.DataFrame:
     import gspread
     gc = gspread.authorize(_credenciales(["https://www.googleapis.com/auth/spreadsheets.readonly"]))
@@ -325,9 +337,10 @@ def _leer_sheet(pestana: str) -> pd.DataFrame:
     return pd.DataFrame(valores[1:], columns=valores[0]) if valores else pd.DataFrame()
 
 
+@st.cache_data(ttl=TTL, show_spinner="Cargando datos…")
 def _formalizacion_cruda() -> pd.DataFrame:
-    """Base «DB Formalización TCF10» tal cual (con datos personales). No se cachea: quien la llame decide qué
-    columnas conserva."""
+    """Base «DB Formalización TCF10» tal cual (con datos personales). Se guarda en la memoria del servidor (nunca
+    en disco ni en el navegador) para no leer el Sheet dos veces: la usan la base del tablero y las identidades."""
     import gspread
     from tcf10 import base_atenea
     cfg = _cfg()
@@ -351,7 +364,7 @@ def _formalizacion_cruda() -> pd.DataFrame:
     return base_atenea.a_dataframe(valores)
 
 
-@st.cache_data(ttl=900, show_spinner="Cargando datos…")
+@st.cache_data(ttl=TTL, show_spinner="Cargando datos…")
 def _base_formalizacion() -> pd.DataFrame:
     """Base de Formalización SIN datos personales (huella del documento, iniciales y columnas del contrato)."""
     from tcf10 import base_atenea
@@ -392,14 +405,12 @@ def _consulta(cliente, sql: str, nombre: str) -> pd.DataFrame:
 def _como_texto(df: pd.DataFrame) -> pd.DataFrame:
     """Deja cada valor como texto, igual que llega de Google Sheets: así sis_sheet.preparar() trata las dos fuentes
     igual (fechas UTC → Bogotá, números, verdadero/falso)."""
-    def t(v):
-        try:
-            if v is None or pd.isna(v):
-                return ""
-        except (TypeError, ValueError):
-            pass
-        return str(v)
-    return pd.DataFrame({c: df[c].astype(object).map(t) for c in df.columns})
+    out = {}
+    for c in df.columns:
+        col = df[c]
+        vacio = col.isna()
+        out[c] = col.astype(object).where(vacio, col.astype(str)).where(~vacio, "")
+    return pd.DataFrame(out, index=df.index)
 
 
 # columnas extra que se piden si la vista las tiene (documento para cruzar con Formalización, hora de inicio)
@@ -437,7 +448,7 @@ def _sis_bigquery() -> dict[str, pd.DataFrame]:
     info = _consulta(cliente, f"SELECT table_name, column_name FROM `{proyecto}.{dataset}`.INFORMATION_SCHEMA.COLUMNS "
                               f"WHERE table_name IN ({', '.join(repr(v) for v in vistas)})", "columnas de las vistas")
     disponibles = info.groupby("table_name")["column_name"].apply(set).to_dict()
-    crudas = {}
+    consultas = {}
     for clave, vista in sis_sheet.PESTANAS.items():
         if vista not in disponibles:
             continue  # sis_sheet.preparar() avisa si falta una vista obligatoria
@@ -446,11 +457,15 @@ def _sis_bigquery() -> dict[str, pd.DataFrame]:
         filtro = f"SAFE_CAST({idc} AS INT64) NOT IN ({excl})"
         if clave == "prog_det":
             filtro += " AND completed_date IS NOT NULL"  # solo lecciones terminadas: lo único que se usa
-        sql = f"SELECT {', '.join(f'`{c}`' for c in dict.fromkeys(cols))} FROM `{ds}.{vista}` WHERE {filtro}"
-        crudas[clave] = _como_texto(_consulta(cliente, sql, vista))
+        consultas[clave] = (f"SELECT {', '.join(f'`{c}`' for c in dict.fromkeys(cols))} FROM `{ds}.{vista}` "
+                            f"WHERE {filtro}", vista)
     if "VTD10_student_progress_detail" in disponibles:
-        crudas["prog_est"] = _como_texto(_consulta(cliente, SQL_POR_ESTUDIANTE.format(ds=ds, excl=excl),
-                                                   "horas de plataforma por estudiante"))
+        consultas["prog_est"] = (SQL_POR_ESTUDIANTE.format(ds=ds, excl=excl), "horas de plataforma por estudiante")
+    # nov-2026: las 7 consultas corrían una tras otra; en paralelo la carga tarda lo que la más lenta.
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=len(consultas) or 1) as ex:
+        futuros = {clave: ex.submit(_consulta, cliente, sql, nombre) for clave, (sql, nombre) in consultas.items()}
+        crudas = {clave: _como_texto(f.result()) for clave, f in futuros.items()}
     try:
         t = sis_sheet.preparar(crudas)
     except sis_sheet.FaltaEstructura as e:
@@ -545,7 +560,7 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
 
 
 # ------------------------------------------------------------------ vista Atenea (detrás de login)
-@st.cache_data(ttl=900, show_spinner="Cargando datos…")
+@st.cache_data(ttl=TTL, show_spinner="Cargando datos…")
 def identidades() -> pd.DataFrame:
     """Nombre completo y documento por huella, SOLO para la app de Atenea (detrás de login con correos de
     Atenea y Kuepa). Atenea es la dueña de la base: aquí no se agrega información que no tenga."""
@@ -634,6 +649,5 @@ def _completar_grupo(benef: pd.DataFrame, avance: pd.DataFrame) -> pd.DataFrame:
 
 
 def refrescar() -> None:
-    for f in (_leer_sheet, _sis_sheet, _base_formalizacion,
-              identidades):
+    for f in (_leer_sheet, _sis_sheet, _formalizacion_cruda, _base_formalizacion, identidades):
         f.clear()

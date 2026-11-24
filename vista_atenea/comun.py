@@ -21,17 +21,23 @@ def hoy() -> pd.Timestamp:
     return ui.HOY_DEMO if data.modo_demo() else pd.Timestamp(datetime.now(ui.TZ).date())
 
 
-def todos() -> pd.DataFrame:
-    """Toda la base preparada (sin filtros)."""
-    try:
-        from tcf10 import metrics
-        df, _ = ui._preparado(hoy(), getattr(metrics, "VERSION", ""))
-    except data.ErrorConfiguracion as e:
-        st.error(str(e), icon=":material/error:")
-        st.stop()
+@st.cache_data(ttl=data.TTL, show_spinner="Cargando datos…")
+def _todos(dia: pd.Timestamp, version: str) -> pd.DataFrame:
+    df, _ = ui._preparado(dia, version)
     df = df.copy()
     df["estado_atenea"] = df.apply(estado, axis=1)
     return df
+
+
+def todos() -> pd.DataFrame:
+    """Toda la base preparada (sin filtros), con el estado de la vista Atenea. En caché: el banner de filtros y
+    cada página la piden en cada clic, y ya no se recalcula."""
+    from tcf10 import metrics
+    try:
+        return _todos(hoy(), getattr(metrics, "VERSION", ""))
+    except data.ErrorConfiguracion as e:
+        st.error(str(e), icon=":material/error:")
+        st.stop()
 
 
 def estado(f: pd.Series) -> str:
