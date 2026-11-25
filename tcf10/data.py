@@ -365,8 +365,10 @@ def _formalizacion_cruda() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=TTL, show_spinner="Cargando datos…")
-def _base_formalizacion() -> pd.DataFrame:
-    """Base de Formalización SIN datos personales (huella del documento, iniciales y columnas del contrato)."""
+def _base_formalizacion(version: str = "") -> pd.DataFrame:
+    """Base de Formalización SIN datos personales (huella del documento, iniciales y columnas del contrato).
+    version: llave del caché (base_atenea.VERSION_BASE); al cambiar las columnas que se leen, el caché se renueva
+    (sin esto, la versión en memoria seguía sin la caracterización hasta reiniciar la app)."""
     from tcf10 import base_atenea
     crudo = _formalizacion_cruda()
     t = _sis_sheet(_esquema_sis())
@@ -674,7 +676,7 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
     elif cfg.get("sheet_id"):
         # Base real: «DB Formalización TCF10» cruzada por documento con el SIS; grupo y fechas salen del SIS.
         from tcf10 import base_atenea
-        benef, cohortes = base_atenea.calendario(_base_formalizacion(), sis_sheet.base(_sis_sheet(_esquema_sis())))
+        benef, cohortes = base_atenea.calendario(_base_formalizacion(base_atenea.VERSION_BASE), sis_sheet.base(_sis_sheet(_esquema_sis())))
         franjas = _sis_sheet(_esquema_sis()).get("franjas")
         if franjas is not None and len(franjas):
             mapa = franjas.set_index("grupo")["franja"]
