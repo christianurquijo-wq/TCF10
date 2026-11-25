@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-VERSION_TERMINOS = "v1 · 2026-11-25 (borrador)"
+VERSION_TERMINOS = "v2 · 2026-11-25 (borrador)"
 BORRADOR = True  # False cuando jurídica apruebe los textos (quita el aviso de borrador)
 
 ATENEA = {
@@ -74,7 +74,8 @@ estado de formación y cumplimiento de metas de los participantes. No se usa par
 **Datos de los participantes que se muestran.** Nombre, tipo y número de documento, cohorte, grupo, jornada, programa
 y nivel, estado en el programa, asistencia, horas de formación, interacciones en la plataforma y fecha de última
 actividad. Provienen de la base de formalización del programa y de la plataforma académica (SIS) del operador. No se
-muestran datos sensibles.
+muestran datos sensibles. La página «Participantes» permite además descargar las vistas del SIS en crudo (CSV), que incluyen
+los datos de contacto y el detalle de actividad registrados en la plataforma; cada descarga queda registrada.
 
 **Datos de quienes usan la herramienta.** Usuario o correo con el que ingresas, fecha y hora de ingreso y salida,
 descargas realizadas y la versión de los términos aceptada. Se usan solo para seguridad y auditoría del acceso. No se

@@ -69,6 +69,8 @@ exportar = vista[cols].rename(columns={
 exportar = exportar.round({c: 1 for c in exportar.select_dtypes("number").columns})
 seguridad.boton_descarga("Descargar Excel", exportar, "TCF10_participantes.xlsx", "Participantes",
                          titulo="TCF10 · Participantes", clave="at_dl_participantes")
+st.write("")
+seguridad.bloque_vistas_crudas()
 
 # ------------------------------------------------------------------ ir a la ficha integral
 filas = evento.selection.rows if evento and evento.selection else []

@@ -63,3 +63,30 @@ def test_excel_confidencial():
     assert "CONFIDENCIAL" in ws["A1"].value and "ana" in ws["A1"].value
     assert ws["A4"].value == "Nombre" and ws["A5"].value == "A"
     assert "ana" in wb.properties.description
+
+
+def test_zip_vistas_crudas(monkeypatch):
+    import types
+    import zipfile
+
+    from tcf10 import data
+
+    class Res:
+        schema = [types.SimpleNamespace(name="id_sis"), types.SimpleNamespace(name="nombre")]
+
+        def __iter__(self):
+            for f in ({"id_sis": 1, "nombre": "Ana, Pérez"}, {"id_sis": 2, "nombre": None}):
+                yield types.SimpleNamespace(values=f.values)
+
+    class Cliente:
+        def query(self, sql):
+            assert sql.startswith("SELECT * FROM `")
+            return types.SimpleNamespace(result=lambda page_size=None: Res())
+
+    monkeypatch.setattr(data, "_cliente_bq", lambda: Cliente())
+    datos, filas = data.zip_vistas_crudas("CONFIDENCIAL")
+    zf = zipfile.ZipFile(io.BytesIO(datos))
+    assert sorted(zf.namelist()) == sorted(["LEEME.txt"] + [v + ".csv" for v in data.VISTAS_CRUDAS])
+    texto = zf.read("VTD10_student_basic_info.csv").decode("utf-8-sig")
+    assert texto.splitlines() == ["id_sis,nombre", '1,"Ana, Pérez"', "2,"]
+    assert set(filas.values()) == {2}

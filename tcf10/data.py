@@ -418,6 +418,53 @@ def _cliente_bq():
     return bigquery.Client(credentials=creds, project=_cfg().get("bq_project") or creds.project_id)
 
 
+# Vistas del SIS que la vista Atenea descarga en crudo (CSV, SELECT * sin filtros). nov-2026.
+VISTAS_CRUDAS = [
+    "VTD10_student_attendance_detail",
+    "VTD10_student_attendance_per_group_summary",
+    "VTD10_student_basic_info",
+    "VTD10_student_login_activity",
+    "VTD10_student_progress_course",
+    "VTD10_student_progress_detail",
+    "VTD10_student_progress_per_course_summary",
+]
+DATASET_CRUDO = "potent-poetry-284019.DVTD_SIS"
+
+
+def zip_vistas_crudas(leeme: str = "", avance=None) -> tuple[bytes, dict[str, int]]:
+    """ZIP con un CSV (UTF-8, separado por comas) por vista de VISTAS_CRUDAS, tal cual están en BigQuery.
+    Se escribe fila a fila para no cargar cada vista completa en un DataFrame. Devuelve (bytes, filas por vista)."""
+    import csv
+    import io
+    import zipfile
+    dataset = _cfg().get("sis_dataset") or DATASET_CRUDO
+    cliente = _cliente_bq()
+    filas: dict[str, int] = {}
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        if leeme:
+            zf.writestr("LEEME.txt", leeme)
+        for i, vista in enumerate(VISTAS_CRUDAS, start=1):
+            if avance:
+                avance(i, vista)
+            try:
+                resultado = cliente.query(f"SELECT * FROM `{dataset}.{vista}`").result(page_size=50_000)
+            except Exception as e:  # noqa: BLE001 -- se informa qué vista falló
+                raise ErrorConfiguracion(f"No se pudo leer {dataset}.{vista}: {getattr(e, 'message', None) or e}") from e
+            n = 0
+            with zf.open(f"{vista}.csv", "w") as destino:
+                texto = io.TextIOWrapper(destino, encoding="utf-8-sig", newline="")
+                w = csv.writer(texto)
+                w.writerow([c.name for c in resultado.schema])
+                for fila in resultado:
+                    w.writerow(["" if v is None else v for v in fila.values()])
+                    n += 1
+                texto.flush()
+                texto.detach()
+            filas[vista] = n
+    return buf.getvalue(), filas
+
+
 def _consulta(cliente, sql: str, nombre: str) -> pd.DataFrame:
     """Corre una consulta y devuelve un DataFrame; los errores se muestran en pantalla con una pista."""
     try:
