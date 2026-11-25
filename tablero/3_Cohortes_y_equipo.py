@@ -126,7 +126,7 @@ with t_coh:
             "desercion": st.column_config.NumberColumn("Deserción", format="%.1f %%"),
             "culminados": C.APROBADO,
             "pct_culminados": st.column_config.NumberColumn("% aprobados", format="%.1f %%"),
-            "horas_promedio": st.column_config.NumberColumn("Horas válidas promedio", format="%.1f"),
+            "horas_promedio": st.column_config.NumberColumn("Horas completadas promedio", format="%.1f"),
             "riesgo_alto": C.RIESGO_ALTO, "riesgo_bajo": C.RIESGO_BAJO, "inactivos": C.INACTIVO,
         })
     st.caption("Deserción = retiros (abandono voluntario) ÷ enrolados. La matriz de riesgos del contrato marca como crítico superar "

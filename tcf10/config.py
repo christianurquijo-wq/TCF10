@@ -112,7 +112,7 @@ RIESGO_BAJO, RIESGO_ALTO, INACTIVO = "Riesgo Deserción Bajo", "Riesgo Deserció
 ESTADOS_FORMACION = [  # (estado, ICP mínimo)
     (EN_FORMACION, 0.75), (EN_SEGUIMIENTO, 0.60), (RIESGO_BAJO, 0.40), (RIESGO_ALTO, 0.10), (INACTIVO, 0.0)]
 EN_CURSO = [e for e, _ in ESTADOS_FORMACION]
-# ESTADO FINAL: Aprobado apenas supera el 70 % (63 h válidas); No aprobado / Abandono al cerrar su grupo.
+# ESTADO FINAL: Aprobado apenas supera el 70 % (63 h completadas); No aprobado / Abandono al cerrar su grupo.
 APROBADO, NO_APROBADO, ABANDONO = "Aprobado Operador", "No Aprobado", "Abandono de Formación"
 ESTADOS_FINALES = [APROBADO, NO_APROBADO, ABANDONO]
 POR_INICIAR, NO_FORMALIZADO = "Por iniciar", "No formalizado"
@@ -121,11 +121,19 @@ CONCEPTO_FINAL = {APROBADO: "Supera el 70 %", NO_APROBADO: "No supera el 70 %",
                   ABANDONO: "Voluntaria o no realiza la formación"}
 
 
+# ------------------------------------------------------------------ caracterización (DB Formalización, nov-2026)
+# columna interna -> etiqueta. Discapacidad y su tipo son datos sensibles (art. 5, Ley 1581): solo se usan para
+# filtrar y en conteos agregados, nunca como columna por persona.
+CARACTERIZACION = {"sexo": "Sexo", "estrato": "Estrato", "nivel_educativo": "Nivel educativo",
+                   "discapacidad": "Discapacidad", "tipo_discapacidad": "Tipo de discapacidad"}
+CARACT_SENSIBLES = ("discapacidad", "tipo_discapacidad")
+SIN_INFO = "Sin información"
+
 # ------------------------------------------------------------------ ICP (Índice de Cumplimiento del Plan)
 # Hoja «Líneas Base - Consolidada» de la DB Formación TCF10: % del curso (horas planeadas acumuladas ÷ 90 h) que el
 # plan cubre al terminar cada semana 1…8, por curso y nivel. Sale de «Líneas Base - Detalle» (cada sesión sincrónica
 # y cada recurso asincrónico con su semana y duración; 31,5 + 58,5 h por curso y nivel). Verificado nov-2026.
-# ICP = (horas válidas ÷ 90 h) ÷ línea base de la semana en curso del grupo (interpolada día a día).
+# ICP = (horas completadas ÷ 90 h) ÷ línea base de la semana en curso del grupo (interpolada día a día).
 LINEA_BASE = {
     ("Auxiliar", "Básico"): [0.23449, 0.43770, 0.68381, 0.89805, 0.93920, 0.96627, 0.97556, 1.0],
     ("Auxiliar", "Intermedio"): [0.18750, 0.40696, 0.62331, 0.84469, 0.88821, 0.92413, 0.95987, 1.0],

@@ -30,6 +30,12 @@ COLUMNAS = {
     "primer_nombre": ["PRIMER_NOMBRE"],
     "primer_apellido": ["PRIMER_APELLIDO"],
     "segundo_apellido": ["SEGUNDO_APELLIDO"],
+    # caracterización (nov-2026); discapacidad = dato sensible: solo filtros y conteos agregados
+    "sexo": ["SDIS_SEXO", "SEXO"],
+    "estrato": ["SDIS_ESTRATO", "ESTRATO"],
+    "nivel_educativo": ["SDIS_NIVEL_EDUCATIVO", "NIVEL_EDUCATIVO", "NIVEL EDUCATIVO"],
+    "discapacidad": ["TG_24_PRESENTA_DISCAPACIDAD", "PRESENTA_DISCAPACIDAD", "DISCAPACIDAD"],
+    "tipo_discapacidad": ["TG_31_TIP_DISCAPACIDAD", "TIPO_DISCAPACIDAD"],
 }
 OBLIGATORIAS = ["documento", "cohorte", "resultado"]
 
@@ -79,6 +85,30 @@ def _iniciales(*partes) -> str:
     return "".join(p[0].upper() + "." for p in palabras[:4])
 
 
+SIN_INFO = "Sin información"
+
+
+def _texto_caract(s: pd.Series) -> pd.Series:
+    """«BASICA SECUNDARIA Y MEDIA» → «Basica secundaria y media»; vacíos y «SIN INFORMACION» → «Sin información»."""
+    t = s.astype("string").fillna("").str.strip()
+    t = t.str.capitalize()
+    return t.mask(t.eq("") | t.map(_plano).isin(["sin informacion", "nan", "none", "no reporta"]), SIN_INFO)
+
+
+def caracterizacion(col: dict) -> dict:
+    """Sexo, estrato, nivel educativo y discapacidad (Sí/No + tipo) con valores homogéneos."""
+    sexo = _texto_caract(col["sexo"])
+    disc_raw = col["discapacidad"].map(_plano)
+    discapacidad = pd.Series(SIN_INFO, index=disc_raw.index).mask(disc_raw.isin(["si", "s"]), "Sí") \
+        .mask(disc_raw.isin(["no", "n"]), "No")
+    tipo = _texto_caract(col["tipo_discapacidad"])
+    tipo = tipo.where(discapacidad.eq("Sí"), "No aplica").mask(discapacidad.eq("Sí") & tipo.isin(
+        [SIN_INFO, "No aplica"]), SIN_INFO)
+    return {"sexo": sexo, "estrato": _texto_caract(col["estrato"]),
+            "nivel_educativo": _texto_caract(col["nivel_educativo"]),
+            "discapacidad": discapacidad, "tipo_discapacidad": tipo}
+
+
 def limpiar(crudo: pd.DataFrame, huella_a_id: dict[str, int]) -> pd.DataFrame:
     """Devuelve la base en el formato interno del tablero (mismo esquema que limpiar_beneficiarios)."""
     por_plano = {_plano(c): c for c in crudo.columns}
@@ -123,6 +153,7 @@ def limpiar(crudo: pd.DataFrame, huella_a_id: dict[str, int]) -> pd.DataFrame:
         "en_sis": ~sin_sis,
         "huella": doc,                                      # para buscar por cédula sin guardar la cédula
         "fuente": "formalizacion",
+        **caracterizacion(col),
     })[validas]
     df["certificado"] = pd.Series([None] * len(df), index=df.index, dtype=object)
     df["formal_t3"] = pd.Series([None] * len(df), index=df.index, dtype=object)

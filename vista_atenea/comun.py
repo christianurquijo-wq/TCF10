@@ -55,9 +55,14 @@ def filtros_banda(df: pd.DataFrame) -> None:
         sel = c.multiselect(etiqueta, opciones, key=f"at_{col}", placeholder="Todos")
         if sel:
             base = base[base[col].astype(str).isin(sel)]
+    ui.filtros_caracterizacion(df, "at")
 
 
 def filtrado(df: pd.DataFrame) -> pd.DataFrame:
+    for col in C.CARACTERIZACION:
+        sel = st.session_state.get(f"at_{col}") or []
+        if sel and col in df:
+            df = df[df[col].astype(str).isin(sel)]
     for col, _ in FILTROS:
         sel = st.session_state.get(f"at_{col}") or []
         if sel:
@@ -100,3 +105,56 @@ def con_identidad(df: pd.DataFrame) -> pd.DataFrame:
         if c not in df:
             df[c] = None
     return df
+
+
+GRUPOS_ESTADO = [("En curso", C.EN_CURSO), (C.APROBADO, [C.APROBADO]), (C.NO_APROBADO, [C.NO_APROBADO]),
+                 (C.ABANDONO, [C.ABANDONO]), (C.POR_INICIAR, [C.POR_INICIAR])]
+MIN_CELDA_SENSIBLE = 5  # conteos de 1 a 4 en datos sensibles se muestran como «< 5» (evita identificar personas)
+
+
+def seccion_caracterizacion(df: pd.DataFrame) -> None:
+    """Formalizados por sexo, estrato, nivel educativo o discapacidad, cruzados con el estado de formación."""
+    import plotly.express as px
+    form = df[df["enrolado"]].copy()
+    dims = [c for c in C.CARACTERIZACION if c in form]
+    if form.empty or not dims:
+        st.info("Sin información de caracterización para este filtro.")
+        return
+    dim = st.pills("Ver por", dims, format_func=C.CARACTERIZACION.get, default=dims[0], key="at_caract_dim") or dims[0]
+    sensible = dim in C.CARACT_SENSIBLES
+    if dim == "tipo_discapacidad":
+        form = form[form["discapacidad"].eq("Sí")]
+    form["_asis"] = asistencia_personas(form)
+    orden = ui.opciones_caract(form[dim])
+    g = form.groupby(dim)
+    t = pd.DataFrame({"participantes": g.size(), "horas": g["horas_validas"].mean(), "asis": g["_asis"].mean()})
+    for nombre, estados in GRUPOS_ESTADO:
+        t[nombre] = g["estado_atenea"].apply(lambda s, e=estados: int(s.isin(e).sum()))
+    t = t.reindex(orden).fillna(0)
+    total = max(1, int(t["participantes"].sum()))
+
+    def n(v):
+        v = int(v)
+        return f"< {MIN_CELDA_SENSIBLE}" if sensible and 0 < v < MIN_CELDA_SENSIBLE else ui.num(v)
+
+    tabla = pd.DataFrame({C.CARACTERIZACION[dim]: t.index,
+                          "Participantes": t["participantes"].map(n),
+                          "%": [ui.pct(v / total, 1) for v in t["participantes"]]})
+    for nombre, _ in GRUPOS_ESTADO:
+        tabla[nombre] = t[nombre].map(n)
+    tabla["Horas completadas promedio"] = t["horas"].map(lambda h: ui.num(h, 1))
+    tabla["Asistencia promedio"] = t["asis"].map(lambda a: ui.pct(a, 1))
+    if not sensible:
+        dist = (form.groupby([dim, "estado_atenea"]).size().rename("personas").reset_index())
+        fig = px.bar(dist, y=dim, x="personas", color="estado_atenea", orientation="h",
+                     category_orders={"estado_atenea": ORDEN_ESTADO, dim: orden}, color_discrete_map=COLOR_ESTADO,
+                     labels={dim: "", "personas": "Participantes", "estado_atenea": "Estado"})
+        fig.update_layout(barmode="stack", separators=",.", legend=dict(orientation="h", y=1.15, title=None),
+                          yaxis=dict(autorange="reversed"))
+        ui.grafica_atenea(fig, max(260, 70 + 34 * len(orden)))
+    st.dataframe(tabla, hide_index=True, width="stretch")
+    nota = "Formalizados del filtro, según la base de Formalización."
+    if sensible:
+        nota += (f" Discapacidad es un dato sensible: solo conteos agregados y, si un grupo tiene menos de "
+                 f"{MIN_CELDA_SENSIBLE} personas, se muestra «< {MIN_CELDA_SENSIBLE}».")
+    st.caption(nota)

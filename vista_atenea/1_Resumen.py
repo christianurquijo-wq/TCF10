@@ -27,7 +27,7 @@ with c[2]:
     estilo.kpi("En curso", ui.num(en_curso), "en alguno de los 5 estados de formación"
                + (f" · {ui.num(por_iniciar)} por iniciar" if por_iniciar else ""), "profundo")
 with c[3]:
-    estilo.kpi(C.APROBADO, ui.num(aprobados), f"superan el 70 % ({ui.num(C.HORAS_CULMINACION)} h válidas de 90 h)",
+    estilo.kpi(C.APROBADO, ui.num(aprobados), f"superan el 70 % ({ui.num(C.HORAS_CULMINACION)} h completadas de 90 h)",
                "naranja")
 with c[4]:
     estilo.kpi(C.ABANDONO, ui.num(abandono),
@@ -51,6 +51,10 @@ der.dataframe(pd.DataFrame({
     "Participantes": [ui.num(int(cuenta.get(e, 0))) for e in C.ESTADOS_FINALES]}), hide_index=True, width="stretch")
 
 st.write("")
+estilo.seccion("Caracterización")
+comun.seccion_caracterizacion(df)
+
+st.write("")
 estilo.seccion("Participantes por programa y nivel")
 st.caption("Formalizados según la Asignación docente: grupos distintos y participantes. Responde a los filtros de "
            "arriba.")
@@ -63,7 +67,7 @@ pagos = {p["clave"]: p for p in M.pagos(completo)}
 cols = estilo.fila(4, "metas")
 fichas = [
     ("Enrolamiento", pagos["enrolamiento"], "Formalizados ÷ cupos contratados"),
-    ("Culminación", pagos["culminacion"], "Personas con ≥ 63 h válidas"),
+    ("Culminación", pagos["culminacion"], "Personas con ≥ 63 h completadas"),
     ("Índice de éxito", pagos["exito"], "Certificados de industria ÷ culminados"),
     ("Tránsito laboral", pagos["tml"], "Formales en PILA a 3 meses ÷ culminados (convocatoria abierta)"),
 ]
@@ -112,7 +116,7 @@ tabla = pd.DataFrame({"Cohorte": t["cohorte"], "Base": t["base"].map(ui.num),
                       "Formalizados": t["formalizados"].map(ui.num)})
 for e in estados:
     tabla[nombres[e]] = t[e].map(ui.num)
-tabla["Horas válidas promedio"] = [ui.num(h, 1) if f else "–" for h, f in zip(t["horas"], t["formalizados"])]
+tabla["Horas completadas promedio"] = [ui.num(h, 1) if f else "–" for h, f in zip(t["horas"], t["formalizados"])]
 tabla["Asistencia promedio"] = t["asistencia"].map(lambda a: ui.pct(a, 1))
 st.dataframe(tabla, hide_index=True, width="stretch")
 st.caption("Cada persona formalizada aparece en un solo estado: las columnas de estado suman «Formalizados».")

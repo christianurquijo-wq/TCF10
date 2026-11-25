@@ -410,7 +410,48 @@ def pestanas(nombres: list[str], clave: str):
 
 # ------------------------------------------------------------------ vista interna: barra única de filtros
 ETIQUETAS_BARRA = {"cohorte": "Cohorte", "grupo": "Grupo", "franja": "Jornada", "docente": "Docente",
-                   "perfil": "Programa", "nivel": "Nivel"}
+                   "perfil": "Programa", "nivel": "Nivel", **C.CARACTERIZACION}
+
+
+def opciones_caract(serie: pd.Series) -> list[str]:
+    """Valores de una columna de caracterización en orden natural, con «Sin información» / «No aplica» al final."""
+    vals = sorted(serie.dropna().astype(str).unique())
+    finales = [v for v in ("No aplica", C.SIN_INFO) if v in vals]
+    return [v for v in vals if v not in finales] + finales
+
+
+def sensible_activo() -> bool:
+    """¿Hay un filtro por discapacidad activo (vista Atenea o interna)? Con él no se listan personas: solo conteos."""
+    return any(st.session_state.get(f"{p}v_{c}") or st.session_state.get(f"{p}_{c}")
+               for p in ("at", "bf") for c in C.CARACT_SENSIBLES)
+
+
+def aviso_sensible() -> None:
+    st.info("Con un filtro de discapacidad activo no se muestran listas de personas: es un dato sensible (art. 5, "
+            "Ley 1581) y solo se usa en conteos agregados. Quita ese filtro para ver el detalle por persona.",
+            icon=":material/shield_person:")
+
+
+def filtros_caracterizacion(df: pd.DataFrame, prefijo: str) -> pd.DataFrame:
+    """Filtros de sexo, estrato, nivel educativo y discapacidad en un desplegable (persisten como los demás)."""
+    cols_c = [c for c in C.CARACTERIZACION if c in df]
+    if not cols_c:
+        return df
+    activos = sum(1 for c in cols_c if st.session_state.get(f"{prefijo}v_{c}"))
+    with st.expander("Caracterización: sexo, estrato, nivel educativo y discapacidad"
+                     + (f" · {activos} filtro(s) activo(s)" if activos else ""), icon=":material/diversity_3:"):
+        cols = st.columns(len(cols_c))
+        for col, c in zip(cols, cols_c):
+            opciones = opciones_caract(df[c])
+            k = f"{prefijo}_{c}"
+            guardado = st.session_state.get(k, st.session_state.get(f"{prefijo}v_{c}", []))
+            st.session_state[k] = [v for v in (guardado or []) if v in opciones]
+            elegido = col.multiselect(C.CARACTERIZACION[c], opciones, key=k, placeholder="Todos")
+            st.session_state[f"{prefijo}v_{c}"] = elegido
+            if elegido:
+                df = df[df[c].astype(str).isin(elegido)]
+        st.caption("Discapacidad es un dato sensible: solo se usa para filtrar y en conteos agregados.")
+    return df
 
 
 def _limpiar_todo(pagina: str, columnas: tuple) -> None:
@@ -451,6 +492,8 @@ def barra_filtros(df: pd.DataFrame, pagina: str, columnas=("cohorte", "perfil", 
             st.session_state[f"bfv_{c}"] = elegido
             if elegido:
                 df = df[df[c].astype(str).isin(elegido)]
+        df = filtros_caracterizacion(df, "bf")
+        columnas = columnas + tuple(c for c in C.CARACTERIZACION if c in df)
         if documento:
             st.session_state["bf_doc"] = st.session_state.get("bf_doc", st.session_state.get("bfv_doc", ""))
             texto = cols[-1].text_input("Documento", key="bf_doc", placeholder="Buscar por número",

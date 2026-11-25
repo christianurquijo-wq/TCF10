@@ -34,7 +34,11 @@ with k3:
                f"{ui.num(int(base['riesgo'].eq(C.RIESGO_BAJO).sum()))} en riesgo bajo", ui.ROJO)
 with k4:
     prom = base.loc[base["enrolado"], "horas_validas"].mean()
-    ui.tarjeta("Horas válidas promedio", ui.num(prom, 1), f"meta: {ui.num(C.HORAS_CULMINACION)} h", ui.NARANJA)
+    ui.tarjeta("Horas completadas promedio", ui.num(prom, 1), f"meta: {ui.num(C.HORAS_CULMINACION)} h", ui.NARANJA)
+
+if ui.sensible_activo():
+    ui.aviso_sensible()
+    st.stop()
 
 # ------------------------------------------------------------------ ficha individual
 if len(base) == 1:
@@ -52,10 +56,11 @@ if len(base) == 1:
         filas = {
             "ID SIS": int(f["id_sis"]) if f["id_sis"] > 0 else "Sin usuario en el SIS",
             "Cohorte": f["cohorte"], "Grupo": f["grupo"], "Jornada": f["franja"], "Perfil": f["perfil"],
-            "Nivel": f["nivel"],
+            "Nivel": f["nivel"], "Sexo": f.get("sexo", "–"), "Estrato": f.get("estrato", "–"),
+            "Nivel educativo": f.get("nivel_educativo", "–"),
             C.ETQ_SINC: f"{ui.num(f['horas_sinc_val'], 1)} de {ui.num(C.HORAS_SINCRONICAS, 1)} h",
             C.ETQ_ASINC: f"{ui.num(f['horas_asinc_val'], 1)} de {ui.num(C.HORAS_ASINCRONICAS, 1)} h",
-            "Horas válidas": f"{ui.num(f['horas_validas'], 1)} de {ui.num(C.HORAS_CULMINACION)} h para aprobar (70 %)",
+            "Horas completadas": f"{ui.num(f['horas_validas'], 1)} de {ui.num(C.HORAS_CULMINACION)} h para aprobar (70 %)",
             "Sesiones": (f"asistió a {int(f['sesiones_asistidas'])} de {int(f['sesiones_registradas'])} registradas"
                          if pd.notna(f.get("sesiones_registradas")) else "–"),
             "Ruta al 70 %": (f"{f['tipo_ruta']} · faltan {ui.num(f['faltan_h'], 1)} h "
@@ -86,7 +91,7 @@ st.dataframe(
         "cohorte": "Cohorte", "grupo": "Grupo", "franja": "Jornada", "estado": "Estado",
         "horas_sinc_val": st.column_config.NumberColumn("Sincrónico (h)", format="%.1f"),
         "horas_asinc_val": st.column_config.NumberColumn("Asincrónico (h)", format="%.1f"),
-        "horas_validas": st.column_config.ProgressColumn("Horas válidas", format="%.1f", min_value=0,
+        "horas_validas": st.column_config.ProgressColumn("Horas completadas", format="%.1f", min_value=0,
                                                          max_value=C.HORAS_CULMINACION),
         "tipo_ruta": "Ruta al 70 %", "faltan_h": st.column_config.NumberColumn("Faltan (h)", format="%.1f"),
         "sesiones_asistidas": st.column_config.NumberColumn("Asistió", format="%d"),

@@ -628,6 +628,37 @@ def base_desde_sis(crudo: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return benef.reset_index(drop=True), cohortes.reset_index(drop=True)
 
 
+def _con_caracterizacion(benef: pd.DataFrame, demo: bool = False) -> pd.DataFrame:
+    """Garantiza las columnas de caracterización. En demo se llenan con valores sintéticos (distribución parecida a
+    la de la base real) para poder probar los filtros."""
+    from tcf10 import config as C
+    import numpy as np
+    b = benef.copy()
+    rng = np.random.default_rng(10)
+    sinteticos = {
+        "sexo": (["Mujer", "Hombre"], [.67, .33]),
+        "estrato": (["Estrato 1", "Estrato 2", "Estrato 3", "Estrato 4", "Sin estrato", C.SIN_INFO],
+                    [.23, .51, .125, .005, .08, .05]),
+        "nivel_educativo": (["Basica secundaria y media", "Tecnico", "Tecnologico", "Universitaria completa",
+                             "Universitario incompleto", "Basica primaria", "Ninguno"],
+                            [.87, .07, .03, .013, .008, .005, .004]),
+        "discapacidad": (["No", "Sí"], [.953, .047]),
+    }
+    for c in C.CARACTERIZACION:
+        if c in b:
+            b[c] = b[c].fillna(C.SIN_INFO)
+            continue
+        if demo and c in sinteticos:
+            valores, p = sinteticos[c]
+            b[c] = rng.choice(valores, size=len(b), p=p)
+        elif demo and c == "tipo_discapacidad":
+            b[c] = np.where(b["discapacidad"].eq("Sí"), rng.choice(
+                ["Multiple", "Intelectual", "Fisica", "Psicosocial", "Auditiva", "Visual"], size=len(b)), "No aplica")
+        else:
+            b[c] = C.SIN_INFO
+    return b
+
+
 def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
     """(beneficiarios, avance, cohortes, es_demo)."""
     m = modo()
@@ -635,7 +666,7 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
         benef = limpiar_beneficiarios(pd.read_csv(DEMO / "beneficiarios.csv", dtype=str))
         avance = limpiar_avance(pd.read_csv(DEMO / "avance.csv"))
         cohortes = limpiar_cohortes(pd.read_csv(DEMO / "cohortes.csv", dtype=str))
-        return benef, avance, cohortes, True
+        return _con_caracterizacion(benef, demo=True), avance, cohortes, True
     cfg = _cfg()
     from tcf10 import sis_sheet
     if m == "sis":
@@ -658,7 +689,7 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
     avance = limpiar_avance(sis_sheet.avance(_sis_sheet(_esquema_sis()), ids, _horas_por_sesion(),
                                              float(cfg.get("divisor_time_view", 3600))))
     benef = _completar_grupo(benef, avance)
-    return benef, avance, cohortes, False
+    return _con_caracterizacion(benef), avance, cohortes, False
 
 
 # ------------------------------------------------------------------ vista Atenea (detrás de login)

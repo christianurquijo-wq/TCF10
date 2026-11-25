@@ -6,7 +6,7 @@ from tcf10 import config as C
 from tcf10 import metrics as M
 from tcf10 import ui
 
-ui.inicio("Avance y estado de formación", f"Horas válidas frente a la meta de {ui.num(C.HORAS_CULMINACION)} h "
+ui.inicio("Avance y estado de formación", f"Horas completadas frente a la meta de {ui.num(C.HORAS_CULMINACION)} h "
           f"(70 % de {ui.num(C.HORAS_TOTALES)} h) y estado según el ICP (cumplimiento del plan a hoy)")
 df = ui.datos()
 df = ui.barra_filtros(df, "av", ("cohorte", "perfil", "nivel", "grupo", "franja", "docente"))
@@ -29,7 +29,7 @@ t_graf, t_lista = ui.pestanas(["Gráficas", "Lista de seguimiento"], "av")
 with t_graf:
     izq, der = st.columns([1.1, 1], gap="large")
     with izq:
-        st.markdown("**Distribución de horas válidas**")
+        st.markdown("**Distribución de horas completadas**")
         fig = go.Figure()
         for r in C.EN_CURSO + [C.APROBADO]:
             x = df.loc[df["riesgo"].eq(r), "horas_validas"]
@@ -37,7 +37,7 @@ with t_graf:
                 fig.add_histogram(x=x, name=r, marker_color=ui.COLOR_RIESGO[r], xbins=dict(start=0, end=90, size=3),
                                   hovertemplate=f"{r}<br>%{{x}} h: %{{y}} personas<extra></extra>")
         ui.linea_meta(fig, C.HORAS_CULMINACION, f"Aprobación {ui.num(C.HORAS_CULMINACION)} h (70 %)", color=ui.NARANJA)
-        fig.update_layout(barmode="stack", xaxis_title=f"Horas válidas ({C.ETQ_SINC.lower()} + {C.ETQ_ASINC.lower()})",
+        fig.update_layout(barmode="stack", xaxis_title=f"Horas completadas ({C.ETQ_SINC.lower()} + {C.ETQ_ASINC.lower()})",
                           yaxis_title="Personas", separators=",.")
         ui.grafica(fig, "av", "histo", {"trace": "riesgo"}, 380)
         st.caption("Toca un color para ver solo ese estado.")
@@ -58,34 +58,37 @@ with t_graf:
 
 # ------------------------------------------------------------------ lista priorizada
 with t_lista:
-    niveles = st.pills("Estado de formación", C.EN_CURSO, selection_mode="multi", key="av_niv",
-                       default=[C.INACTIVO, C.RIESGO_ALTO, C.RIESGO_BAJO])
-    lista = en_curso[en_curso["riesgo"].isin(niveles or C.EN_CURSO)].copy()
-    lista["orden"] = lista["riesgo"].map(ORDEN)
-    lista["pct_esp"] = lista["pct_esperado"] * 100
-    lista = lista.sort_values(["orden", "pct_esperado", "dias_sin_actividad"], ascending=[True, True, False])
-    lista["persona"] = lista["nombre"].map(ui.iniciales)
-    lista["id_sis"] = lista["id_sis"].where(lista["id_sis"] > 0)  # negativos = sin usuario en el SIS
-    lista["motivo"] = lista.apply(M.motivo_riesgo, axis=1)
-    lista["faltan_h"] = (C.HORAS_CULMINACION - lista["horas_validas"]).clip(lower=0)
-    st.caption(f"{ui.num(len(lista))} personas, las más urgentes primero.")
-    vista = lista[["riesgo", "pct_esp", "id_sis", "persona", "cohorte", "grupo", "docente", "gestor", "horas_sinc_val",
-                   "horas_asinc_val", "horas_validas", "avance_esperado_h", "faltan_h", "dias_sin_actividad", "motivo"]]
-    st.dataframe(
-        vista, hide_index=True, width="stretch", height=520,
-        column_config={
-            "riesgo": st.column_config.TextColumn("Estado formación", pinned=True),
-            "pct_esp": st.column_config.NumberColumn("ICP", format="%.0f %%"),
-            "id_sis": st.column_config.NumberColumn("ID SIS", format="%d"), "persona": "Iniciales",
-            "cohorte": "Cohorte", "grupo": "Grupo", "docente": "Docente", "gestor": "Gestor",
-            "horas_sinc_val": st.column_config.NumberColumn("Sincrónico (h)", format="%.1f"),
-            "horas_asinc_val": st.column_config.NumberColumn("Asincrónico (h)", format="%.1f"),
-            "horas_validas": st.column_config.ProgressColumn("Horas válidas", format="%.1f",
-                                                             min_value=0, max_value=C.HORAS_CULMINACION),
-            "avance_esperado_h": st.column_config.NumberColumn("Plan a hoy (h)", format="%.1f"),
-            "faltan_h": st.column_config.NumberColumn("Faltan para 63 h", format="%.1f"),
-            "dias_sin_actividad": st.column_config.NumberColumn("Días sin actividad", format="%d"),
-            "motivo": "Por qué",
-        })
-    st.download_button("Descargar lista (CSV)", vista.to_csv(index=False).encode("utf-8-sig"),
-                       "tcf10_seguimiento.csv", "text/csv", icon=":material/download:")
+    if ui.sensible_activo():
+        ui.aviso_sensible()
+    else:
+        niveles = st.pills("Estado de formación", C.EN_CURSO, selection_mode="multi", key="av_niv",
+                           default=[C.INACTIVO, C.RIESGO_ALTO, C.RIESGO_BAJO])
+        lista = en_curso[en_curso["riesgo"].isin(niveles or C.EN_CURSO)].copy()
+        lista["orden"] = lista["riesgo"].map(ORDEN)
+        lista["pct_esp"] = lista["pct_esperado"] * 100
+        lista = lista.sort_values(["orden", "pct_esperado", "dias_sin_actividad"], ascending=[True, True, False])
+        lista["persona"] = lista["nombre"].map(ui.iniciales)
+        lista["id_sis"] = lista["id_sis"].where(lista["id_sis"] > 0)  # negativos = sin usuario en el SIS
+        lista["motivo"] = lista.apply(M.motivo_riesgo, axis=1)
+        lista["faltan_h"] = (C.HORAS_CULMINACION - lista["horas_validas"]).clip(lower=0)
+        st.caption(f"{ui.num(len(lista))} personas, las más urgentes primero.")
+        vista = lista[["riesgo", "pct_esp", "id_sis", "persona", "cohorte", "grupo", "docente", "gestor", "horas_sinc_val",
+                       "horas_asinc_val", "horas_validas", "avance_esperado_h", "faltan_h", "dias_sin_actividad", "motivo"]]
+        st.dataframe(
+            vista, hide_index=True, width="stretch", height=520,
+            column_config={
+                "riesgo": st.column_config.TextColumn("Estado formación", pinned=True),
+                "pct_esp": st.column_config.NumberColumn("ICP", format="%.0f %%"),
+                "id_sis": st.column_config.NumberColumn("ID SIS", format="%d"), "persona": "Iniciales",
+                "cohorte": "Cohorte", "grupo": "Grupo", "docente": "Docente", "gestor": "Gestor",
+                "horas_sinc_val": st.column_config.NumberColumn("Sincrónico (h)", format="%.1f"),
+                "horas_asinc_val": st.column_config.NumberColumn("Asincrónico (h)", format="%.1f"),
+                "horas_validas": st.column_config.ProgressColumn("Horas completadas", format="%.1f",
+                                                                 min_value=0, max_value=C.HORAS_CULMINACION),
+                "avance_esperado_h": st.column_config.NumberColumn("Plan a hoy (h)", format="%.1f"),
+                "faltan_h": st.column_config.NumberColumn("Faltan para 63 h", format="%.1f"),
+                "dias_sin_actividad": st.column_config.NumberColumn("Días sin actividad", format="%d"),
+                "motivo": "Por qué",
+            })
+        st.download_button("Descargar lista (CSV)", vista.to_csv(index=False).encode("utf-8-sig"),
+                           "tcf10_seguimiento.csv", "text/csv", icon=":material/download:")

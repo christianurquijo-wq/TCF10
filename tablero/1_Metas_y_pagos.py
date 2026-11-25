@@ -89,11 +89,14 @@ with t_proy:
                + "). Supuesto ajustable en tcf10/config.py.")
 
 with t_pers:
-    st.caption(f"{ui.num(len(sel))} personas con los filtros de la pestaña anterior, las de menos horas primero.")
-    lista = sel.assign(persona=sel["nombre"].map(ui.iniciales), motivo=sel.apply(M.motivo_riesgo, axis=1))
-    st.dataframe(lista[["id_sis", "persona", "cohorte", "grupo", "riesgo", "horas_validas", "tipo_ruta", "motivo"]]
-                 .sort_values("horas_validas"), hide_index=True, width="stretch", height=520, column_config={
-                     "id_sis": st.column_config.NumberColumn("ID SIS", format="%d", pinned=True),
-                     "persona": "Iniciales", "cohorte": "Cohorte", "grupo": "Grupo", "riesgo": "Estado",
-                     "horas_validas": st.column_config.NumberColumn("Horas válidas", format="%.1f"),
-                     "tipo_ruta": "Ruta al 70 %", "motivo": "Por qué"})
+    if ui.sensible_activo():
+        ui.aviso_sensible()
+    else:
+        st.caption(f"{ui.num(len(sel))} personas con los filtros de la pestaña anterior, las de menos horas primero.")
+        lista = sel.assign(persona=sel["nombre"].map(ui.iniciales), motivo=sel.apply(M.motivo_riesgo, axis=1))
+        st.dataframe(lista[["id_sis", "persona", "cohorte", "grupo", "riesgo", "horas_validas", "tipo_ruta", "motivo"]]
+                     .sort_values("horas_validas"), hide_index=True, width="stretch", height=520, column_config={
+                         "id_sis": st.column_config.NumberColumn("ID SIS", format="%d", pinned=True),
+                         "persona": "Iniciales", "cohorte": "Cohorte", "grupo": "Grupo", "riesgo": "Estado",
+                         "horas_validas": st.column_config.NumberColumn("Horas completadas", format="%.1f"),
+                         "tipo_ruta": "Ruta al 70 %", "motivo": "Por qué"})

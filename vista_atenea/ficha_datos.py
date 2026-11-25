@@ -104,7 +104,7 @@ def _demo(f: pd.Series, hoy: pd.Timestamp) -> dict:
 def proyeccion(f: pd.Series, hoy: pd.Timestamp) -> tuple[str, str]:
     """(valor, nota) de la fecha estimada de culminación al ritmo actual."""
     if f.get("culmino"):
-        return C.APROBADO, f"{f['horas_validas']:.1f} h válidas".replace(".", ",")
+        return C.APROBADO, f"{f['horas_validas']:.1f} h completadas".replace(".", ",")
     inicio = pd.to_datetime(f.get("fi_grupo") if pd.notna(f.get("fi_grupo", pd.NaT)) else f.get("fecha_inicio"))
     fin = pd.to_datetime(f.get("ff_grupo") if pd.notna(f.get("ff_grupo", pd.NaT)) else f.get("fecha_fin"))
     if pd.isna(inicio) or hoy <= inicio:

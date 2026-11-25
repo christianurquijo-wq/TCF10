@@ -12,7 +12,7 @@ st.markdown(f"""
 **Formación.** {ui.num(C.HORAS_TOTALES)} h por perfil: {ui.num(C.HORAS_SINCRONICAS, 1)} h de {C.ETQ_SINC.lower()}
 (35 %, sesiones con docente) y {ui.num(C.HORAS_ASINCRONICAS, 1)} h de {C.ETQ_ASINC.lower()} (65 %, plataforma). Cada
 componente cuenta hasta su tope: horas de más en uno no compensan el otro. **Aprueba** quien supera el
-{ui.pct(C.UMBRAL_CULMINACION)}: **{ui.num(C.HORAS_CULMINACION)} h válidas**.
+{ui.pct(C.UMBRAL_CULMINACION)}: **{ui.num(C.HORAS_CULMINACION)} h completadas**.
 
 **Fuente del avance.** Vistas VTD10 del SIS (BigQuery o su copia en Google Sheets), cruzadas por ID SIS: sincrónicas = sesiones pasadas con
 asistencia × 4 h por sesión; asincrónicas = Horas_Plataforma_Acreditadas: tiempo pedagógico acreditado
@@ -22,13 +22,13 @@ certificación y situación laboral sale del Google Sheet operativo.
 
 **Estados del participante** (cuadro de parámetros de Kuepa EduTech, nov-2026):
 - **Estado de formación** (grupo en curso y aún sin el 70 %), según el ICP con los rangos del cuadro.
-  **ICP (Índice de Cumplimiento del Plan)** = (horas válidas ÷ 90 h) ÷ línea base. La **línea base** es el % del
+  **ICP (Índice de Cumplimiento del Plan)** = (horas completadas ÷ 90 h) ÷ línea base. La **línea base** es el % del
   curso que el plan cubre a hoy: horas planeadas acumuladas (sesiones sincrónicas y recursos asincrónicos del plan de
   cada curso y nivel) ÷ 90 h, por semana desde el inicio del grupo e interpolada día a día (p. ej. Marketing Básico:
   21 % al cerrar la semana 1, 64 % la 3, 88 % la 4 y 100 % la 8).
   Igual que la hoja «Seg.Formación» de la DB Formación, pero con la semana de cada grupo (no una sola para todos).
   El día de inicio del grupo queda en *{C.EN_FORMACION}*. Formalizado sin usuario en el SIS = *{C.INACTIVO}*.
-- **{C.APROBADO}:** apenas supera el 70 % ({ui.num(C.HORAS_CULMINACION)} h válidas).
+- **{C.APROBADO}:** apenas supera el 70 % ({ui.num(C.HORAS_CULMINACION)} h completadas).
 - **Al cerrar su grupo** sin llegar al 70 %: *{C.NO_APROBADO}*; si no registró ninguna hora, *{C.ABANDONO}*.
   Quien se retira: *{C.ABANDONO}* (voluntaria) en cualquier momento.
 - Además: *{C.POR_INICIAR}* (su grupo no ha empezado) y *{C.NO_FORMALIZADO}*.
@@ -58,13 +58,13 @@ st.markdown("""
 
 st.subheader("Ruta al 70 % y casos críticos")
 st.markdown(f"""
-- **Meta:** {ui.num(C.HORAS_CULMINACION)} h válidas (70 % de {ui.num(C.HORAS_TOTALES)} h). Con la plataforma al 100 %
+- **Meta:** {ui.num(C.HORAS_CULMINACION)} h completadas (70 % de {ui.num(C.HORAS_TOTALES)} h). Con la plataforma al 100 %
   ({ui.num(C.HORAS_ASINCRONICAS, 1)} h) faltan {ui.num(C.HORAS_CULMINACION - C.HORAS_ASINCRONICAS, 1)} h con docente;
   cada clase asistida vale {ui.num(C.HORAS_POR_SESION)} h, así que se necesitan **2 clases** en total.
 - **Ruta:** con 2 o más clases → *Solo plataforma*; con 1 → *1 clase + plataforma*; sin clases → *2 clases +
   plataforma*. *No alcanza*: le faltan más clases de las que quedan en su grupo (o el grupo cerró sin llegar).
   *Ya aprobó*: ya tiene {ui.num(C.HORAS_CULMINACION)} h.
-- **Faltan (h):** {ui.num(C.HORAS_CULMINACION)} h menos sus horas válidas. **En plataforma (h):** lo que debe
+- **Faltan (h):** {ui.num(C.HORAS_CULMINACION)} h menos sus horas completadas. **En plataforma (h):** lo que debe
   completar en plataforma si asiste solo a las clases mínimas de su ruta.
 - **Caso crítico** (solo grupos en curso): 0 h en plataforma con el grupo iniciado hace {C.DIAS_SIN_PLATAFORMA}+ días,
   {C.DIAS_SIN_PLATAFORMA}+ días sin entrar a la plataforma, *No alcanza*, o {C.FEEDBACK_ATRASO_CRITICO} o más Feedbacks

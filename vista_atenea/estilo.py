@@ -32,6 +32,9 @@ button[aria-label^="Download as CSV"], [data-testid="stElementToolbarButton"]:ha
     display:none !important;}
 .sello-enlace {display:inline-block; border-radius:10px; text-decoration:none !important; transition:box-shadow .15s;}
 .sello-enlace:hover, .sello-enlace:focus-visible {box-shadow:0 0 0 3px #EF6F18;}
+.st-key-banda [data-testid="stExpander"] details {border-color:#2051A0; background:transparent;}
+.st-key-banda [data-testid="stExpander"] summary, .st-key-banda [data-testid="stExpander"] summary * {color:#FFFFFF !important;}
+.st-key-banda [data-testid="stExpander"] summary:hover {background:#05247D;}
 .pie-legal {border-top:1px solid #D3E7EF; margin-top:28px; padding-top:10px; color:#4A4F78; font-size:.85rem;}
 .pie-legal a {color:#2051A0;}
 .block-container {padding-top: 3.2rem; max-width: 1320px;}

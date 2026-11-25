@@ -82,3 +82,16 @@ def test_asignacion_manda_programa_nivel_y_grupo():
     assert t.loc[("Marketing y finanzas", "Básico", "detalle"), "grupos"] == 1
     assert t.loc[("Marketing y finanzas", "Básico", "detalle"), "participantes"] == 2
     assert t.loc[("Total", "", "total"), "grupos"] == 3 and t.loc[("Total", "", "total"), "participantes"] == 4
+
+
+def test_caracterizacion_normalizada():
+    col = {"sexo": pd.Series(["MUJER", "", "HOMBRE"]), "estrato": pd.Series(["ESTRATO 2", "SIN INFORMACION", None]),
+           "nivel_educativo": pd.Series(["BASICA SECUNDARIA Y MEDIA", "TECNICO", ""]),
+           "discapacidad": pd.Series(["NO", "SI", "SIN INFORMACION"]),
+           "tipo_discapacidad": pd.Series(["NO APLICA", "", "FISICA"])}
+    c = B.caracterizacion({k: v.astype("string").fillna("") for k, v in col.items()})
+    assert list(c["sexo"]) == ["Mujer", C.SIN_INFO, "Hombre"]
+    assert list(c["estrato"]) == ["Estrato 2", C.SIN_INFO, C.SIN_INFO]
+    assert list(c["nivel_educativo"])[0] == "Basica secundaria y media"
+    assert list(c["discapacidad"]) == ["No", "Sí", C.SIN_INFO]
+    assert list(c["tipo_discapacidad"]) == ["No aplica", C.SIN_INFO, "No aplica"]

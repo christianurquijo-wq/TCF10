@@ -1,4 +1,4 @@
-"""Progreso: horas válidas frente a la meta de 63 h y avance en los cursos de la plataforma."""
+"""Progreso: horas completadas frente a la meta de 63 h y avance en los cursos de la plataforma."""
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
@@ -7,7 +7,7 @@ from tcf10 import config as C
 from tcf10 import ui
 from vista_atenea import comun, estilo
 
-estilo.pagina("Progreso", f"Horas válidas frente a la meta de {ui.num(C.HORAS_CULMINACION)} h y avance en los cursos")
+estilo.pagina("Progreso", f"Horas completadas frente a la meta de {ui.num(C.HORAS_CULMINACION)} h y avance en los cursos")
 df = comun.filtrado(comun.todos())
 comun.nota_filtros()
 form = df[df["estado_atenea"].isin(C.EN_CURSO + [C.APROBADO, C.NO_APROBADO])]
@@ -17,7 +17,7 @@ if form.empty:
 
 c = estilo.fila(4, "prog")
 with c[0]:
-    estilo.kpi("Horas válidas promedio", ui.num(form["horas_validas"].mean(), 1),
+    estilo.kpi("Horas completadas promedio", ui.num(form["horas_validas"].mean(), 1),
                f"de {ui.num(C.HORAS_CULMINACION)} h para aprobar (70 %)", "azul")
 with c[1]:
     estilo.kpi(f"{C.ETQ_SINC} promedio", ui.num(form["horas_sinc_val"].mean(), 1),
@@ -27,14 +27,14 @@ with c[2]:
                f"tope {ui.num(C.HORAS_ASINCRONICAS, 1)} h · 65 % (plataforma)", "noche")
 with c[3]:
     estilo.kpi("Avance hacia la aprobación", ui.pct(min(1, form["horas_validas"].mean() / C.HORAS_CULMINACION)),
-               "promedio de horas válidas ÷ 63 h", "naranja")
+               "promedio de horas completadas ÷ 63 h", "naranja")
 
 st.write("")
-estilo.seccion("Distribución de horas válidas")
+estilo.seccion("Distribución de horas completadas")
 fig = go.Figure(go.Histogram(x=form["horas_validas"], xbins=dict(start=0, end=90, size=3), marker_color=ui.AZUL))
 fig.add_vline(x=C.HORAS_CULMINACION, line_dash="dash", line_color=ui.NARANJA,
               annotation_text=f"Meta {ui.num(C.HORAS_CULMINACION)} h")
-fig.update_layout(xaxis_title="Horas válidas", yaxis_title="Participantes", bargap=.05)
+fig.update_layout(xaxis_title="Horas completadas", yaxis_title="Participantes", bargap=.05)
 ui.grafica_atenea(fig, 320)
 
 _, prog = comun.agregados_asistencia(df)

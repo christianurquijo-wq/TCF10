@@ -136,42 +136,45 @@ with t_grupos:
         })
 
 with t_est:
-    g1, g2 = st.columns([2.2, 1], vertical_alignment="bottom")
-    tipos = g1.pills("Ruta al 70 %", C.TIPOS_RUTA, selection_mode="multi", key="gc_tipos")
-    solo_crit = g2.toggle("Solo críticos", value=True, key="gc_solo")
-    est = form
-    if tipos:
-        est = est[est["tipo_ruta"].isin(tipos)]
-    if solo_crit:
-        est = est[est["critico"]]
-    est = comun.con_identidad(est)
-    est["asistencia"] = (est["sesiones_asistidas"] / est["sesiones_registradas"].where(est["sesiones_registradas"] > 0)) * 100
-    est["orden"] = est["tipo_ruta"].map({k: i for i, k in enumerate(C.TIPOS_RUTA)})
-    est = est.sort_values(["critico", "orden", "faltan_h"], ascending=[False, True, False])
-    st.caption(f"{ui.num(len(est))} estudiantes, críticos primero. «Faltan»: horas válidas que le faltan para 63 h; "
-               "«En plataforma»: las que debe completar en plataforma si toma solo las clases mínimas de su ruta.")
-    tabla = est[["nombre_completo", "documento", "grupo", "tipo_ruta", "motivo_critico", "faltan_h", "clases_faltantes",
-                 "faltan_plataforma_h", "sesiones_restantes", "horas_sinc_val", "horas_asinc_val", "asistencia",
-                 "ultima_plataforma"]].copy()
-    tabla["nombre_completo"] = tabla["nombre_completo"].fillna(est["nombre"] if "nombre" in est else "")
-    st.dataframe(tabla, hide_index=True, width="stretch", height=min(600, 38 + 35 * max(1, len(tabla))),
-                 column_config={
-                     "nombre_completo": st.column_config.TextColumn("Estudiante", pinned=True),
-                     "documento": "Documento", "grupo": "Grupo", "tipo_ruta": "Ruta al 70 %",
-                     "motivo_critico": "Por qué es crítico",
-                     "faltan_h": st.column_config.NumberColumn("Faltan (h)", format="%.1f"),
-                     "clases_faltantes": st.column_config.NumberColumn("Clases que faltan", format="%d"),
-                     "faltan_plataforma_h": st.column_config.NumberColumn("En plataforma (h)", format="%.1f"),
-                     "sesiones_restantes": st.column_config.NumberColumn("Clases que quedan", format="%d"),
-                     "horas_sinc_val": st.column_config.NumberColumn("Con docente (h)", format="%.1f"),
-                     "horas_asinc_val": st.column_config.NumberColumn("Plataforma (h)", format="%.1f"),
-                     "asistencia": st.column_config.ProgressColumn("Asistencia", format="%.0f %%", min_value=0,
-                                                                   max_value=100),
-                     "ultima_plataforma": st.column_config.DateColumn("Último ingreso plataforma", format="DD/MM/YYYY"),
-                 })
-    buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as xw:
-        tabla.to_excel(xw, sheet_name="Estudiantes", index=False)
-        grupos.to_excel(xw, sheet_name="Grupos", index=False)
-    st.download_button("Descargar Excel", buf.getvalue(), f"tcf10_casos_criticos_{hoy:%Y%m%d}.xlsx",
-                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", icon=":material/download:")
+    if ui.sensible_activo():
+        ui.aviso_sensible()
+    else:
+        g1, g2 = st.columns([2.2, 1], vertical_alignment="bottom")
+        tipos = g1.pills("Ruta al 70 %", C.TIPOS_RUTA, selection_mode="multi", key="gc_tipos")
+        solo_crit = g2.toggle("Solo críticos", value=True, key="gc_solo")
+        est = form
+        if tipos:
+            est = est[est["tipo_ruta"].isin(tipos)]
+        if solo_crit:
+            est = est[est["critico"]]
+        est = comun.con_identidad(est)
+        est["asistencia"] = (est["sesiones_asistidas"] / est["sesiones_registradas"].where(est["sesiones_registradas"] > 0)) * 100
+        est["orden"] = est["tipo_ruta"].map({k: i for i, k in enumerate(C.TIPOS_RUTA)})
+        est = est.sort_values(["critico", "orden", "faltan_h"], ascending=[False, True, False])
+        st.caption(f"{ui.num(len(est))} estudiantes, críticos primero. «Faltan»: horas completadas que le faltan para 63 h; "
+                   "«En plataforma»: las que debe completar en plataforma si toma solo las clases mínimas de su ruta.")
+        tabla = est[["nombre_completo", "documento", "grupo", "tipo_ruta", "motivo_critico", "faltan_h", "clases_faltantes",
+                     "faltan_plataforma_h", "sesiones_restantes", "horas_sinc_val", "horas_asinc_val", "asistencia",
+                     "ultima_plataforma"]].copy()
+        tabla["nombre_completo"] = tabla["nombre_completo"].fillna(est["nombre"] if "nombre" in est else "")
+        st.dataframe(tabla, hide_index=True, width="stretch", height=min(600, 38 + 35 * max(1, len(tabla))),
+                     column_config={
+                         "nombre_completo": st.column_config.TextColumn("Estudiante", pinned=True),
+                         "documento": "Documento", "grupo": "Grupo", "tipo_ruta": "Ruta al 70 %",
+                         "motivo_critico": "Por qué es crítico",
+                         "faltan_h": st.column_config.NumberColumn("Faltan (h)", format="%.1f"),
+                         "clases_faltantes": st.column_config.NumberColumn("Clases que faltan", format="%d"),
+                         "faltan_plataforma_h": st.column_config.NumberColumn("En plataforma (h)", format="%.1f"),
+                         "sesiones_restantes": st.column_config.NumberColumn("Clases que quedan", format="%d"),
+                         "horas_sinc_val": st.column_config.NumberColumn("Con docente (h)", format="%.1f"),
+                         "horas_asinc_val": st.column_config.NumberColumn("Plataforma (h)", format="%.1f"),
+                         "asistencia": st.column_config.ProgressColumn("Asistencia", format="%.0f %%", min_value=0,
+                                                                       max_value=100),
+                         "ultima_plataforma": st.column_config.DateColumn("Último ingreso plataforma", format="DD/MM/YYYY"),
+                     })
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as xw:
+            tabla.to_excel(xw, sheet_name="Estudiantes", index=False)
+            grupos.to_excel(xw, sheet_name="Grupos", index=False)
+        st.download_button("Descargar Excel", buf.getvalue(), f"tcf10_casos_criticos_{hoy:%Y%m%d}.xlsx",
+                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", icon=":material/download:")

@@ -49,7 +49,7 @@ def _redondear_pct(x: float | None) -> int | None:
 # ------------------------------------------------------------------ avance y riesgo
 def preparar(benef: pd.DataFrame, avance: pd.DataFrame, cohortes: pd.DataFrame,
              hoy: pd.Timestamp) -> pd.DataFrame:
-    """Une base + avance + calendario y calcula horas válidas, culminación, ritmo y riesgo."""
+    """Une base + avance + calendario y calcula horas completadas, culminación, ritmo y riesgo."""
     df = benef.merge(avance, on="id_sis", how="left").merge(cohortes, on="cohorte", how="left")
     for c in ("horas_sinc", "horas_asinc"):
         df[c] = pd.to_numeric(df.get(c), errors="coerce").fillna(0.0)
@@ -98,7 +98,7 @@ def preparar(benef: pd.DataFrame, avance: pd.DataFrame, cohortes: pd.DataFrame,
 
 
 def avance_frente_esperado(f: pd.Series) -> float | None:
-    """ICP: (horas válidas ÷ 90 h) ÷ línea base de la semana en curso de su grupo (= horas válidas ÷ horas que el plan
+    """ICP: (horas completadas ÷ 90 h) ÷ línea base de la semana en curso de su grupo (= horas completadas ÷ horas que el plan
     del curso espera a hoy). None el día de inicio (aún no se espera nada)."""
     if f.get("en_sis") in (False,):  # formalizado sin usuario en la plataforma: no puede estudiar
         return 0.0
@@ -301,7 +301,7 @@ def tipificar(df: pd.DataFrame, hoy: pd.Timestamp) -> pd.DataFrame:
     así que hacen falta 2 clases en total (8 h → 66,5 h). Por eso:
       ≥ 2 clases asistidas → «Solo plataforma» · 1 clase → «1 clase + plataforma» · 0 → «2 clases + plataforma».
     «No alcanza»: le faltan más clases de las que quedan en su grupo, o el grupo ya cerró sin que llegara.
-    «Ya aprobó»: ya tiene 63 h válidas.
+    «Ya aprobó»: ya tiene 63 h completadas.
     Columnas nuevas: clases_faltantes, tipo_ruta, faltan_h, faltan_plataforma_h, sesiones_restantes,
     max_alcanzable_h, sin_plataforma, no_alcanza, critico, motivo_critico.
     """

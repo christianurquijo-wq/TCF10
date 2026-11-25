@@ -16,6 +16,10 @@ estilo.pagina("Ficha del participante", "Estado actual, trayectoria de horas, as
 todos = comun.todos()
 base = comun.filtrado(todos)
 
+if ui.sensible_activo():
+    ui.aviso_sensible()
+    st.stop()
+
 # ------------------------------------------------------------------ buscador
 ident = data.identidades()
 df = base.drop(columns=[c for c in ("nombre_completo", "tipo_documento", "documento") if c in base])
@@ -50,6 +54,8 @@ chips = [(etiqueta_estado, comun.COLOR_ESTADO.get(estado, ui.GRIS))] + [
 st.markdown(
     f"<div class='ficha-cab'><div class='ficha-nombre'>{f['nombre_completo'] or 'Participante'}</div>"
     f"<div class='ficha-datos'>{f['tipo_documento'] or ''} {f['documento'] or ''}"
+    + "".join(f" · {f[c]}" for c in ("sexo", "estrato", "nivel_educativo")
+              if str(f.get(c, "")) not in ("", "nan", "None", C.SIN_INFO))
     + "</div>"
     + "".join(f"<span class='chip' style='background:{c};color:{ui.texto_sobre(c)}'>{t}</span>" for t, c in chips) + "</div>",
     unsafe_allow_html=True)
@@ -65,7 +71,7 @@ k = estilo.fila(5, "ficha")
 with k[0]:
     estilo.kpi("Asistencia", ui.pct(pct_asis), f"asistió a {asistio} de {len(pasadas)} sesiones registradas", "azul")
 with k[1]:
-    estilo.kpi("Horas válidas", ui.num(f["horas_validas"], 1),
+    estilo.kpi("Horas completadas", ui.num(f["horas_validas"], 1),
                f"{ui.pct(min(1, f['horas_validas'] / C.HORAS_CULMINACION))} de las {ui.num(C.HORAS_CULMINACION)} h "
                "para culminar", "noche")
 with k[2]:
@@ -93,7 +99,7 @@ else:
     d["asinc"] = d["h_asinc"].clip(upper=C.HORAS_ASINCRONICAS)
     d["validas"] = d["sinc"] + d["asinc"]
     fig = go.Figure()
-    fig.add_scatter(x=d.index, y=d["validas"], name="Horas válidas", mode="lines", line=dict(color=ui.NOCHE, width=3),
+    fig.add_scatter(x=d.index, y=d["validas"], name="Horas completadas", mode="lines", line=dict(color=ui.NOCHE, width=3),
                     fill="tozeroy", fillcolor="rgba(32,81,160,.10)")
     fig.add_scatter(x=d.index, y=d["sinc"], name=C.ETQ_SINC, mode="lines", line=dict(color=ui.AZUL, width=2))
     fig.add_scatter(x=d.index, y=d["asinc"], name=C.ETQ_ASINC, mode="lines", line=dict(color=ui.NARANJA, width=2))
@@ -109,7 +115,7 @@ else:
     ui.grafica_atenea(fig, 360)
     st.caption("Sincrónico (asistencia): sesiones asistidas con el docente. Asincrónico (contenidos): horas acreditadas en la plataforma, "
                "distribuidas según los días de ingreso. La línea punteada es la línea base del plan del curso (horas "
-               "que el plan espera cubiertas cada día); el ICP compara las horas válidas con ella.")
+               "que el plan espera cubiertas cada día); el ICP compara las horas completadas con ella.")
 
 # ------------------------------------------------------------------ asistencia sesión por sesión
 izq, der = st.columns([1.35, 1])
@@ -187,7 +193,7 @@ with a:
 with b:
     fig = go.Figure()
     for (nombre, v), color in zip(serie.items(), colores):
-        fig.add_bar(name=nombre, x=[C.ETQ_SINC, C.ETQ_ASINC, "Válidas"], y=list(v[1:]), marker_color=color,
+        fig.add_bar(name=nombre, x=[C.ETQ_SINC, C.ETQ_ASINC, "Completadas"], y=list(v[1:]), marker_color=color,
                     text=[ui.num(x, 1) for x in v[1:]], textposition="outside")
     fig.update_layout(title="Horas", barmode="group", legend=dict(orientation="h", y=-0.18, x=0))
     ui.grafica_atenea(fig, 300)

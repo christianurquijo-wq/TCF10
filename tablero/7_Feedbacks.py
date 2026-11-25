@@ -158,37 +158,40 @@ with t_grupos:
         })
 
 with t_est:
-    e1, e2 = st.columns([2, 1], vertical_alignment="bottom")
-    estados = e1.pills("Estado", C.ESTADOS_FEEDBACK, selection_mode="multi", key="fb_estados")
-    solo = e2.toggle("Solo con pendientes", value=False, key="fb_solo")
-    est = comun.con_identidad(base)
-    if estados:
-        est = est[est["estado_feedback"].isin(estados)]
-    if solo:
-        est = est[est["feedbacks_atraso"] > 0]
-    est = est.sort_values(["feedbacks_atraso", "feedbacks_hechos", "grupo"], ascending=[False, True, True])
-    for n in range(1, TOT + 1):  # ✓ hecho · ✗ pendiente (ya le tocaba) · – aún no le toca
-        est[f"F{n}"] = ["✓" if h else ("✗" if n <= m else "–")
-                        for h, m in zip(est[f"fb_{n}"], est["feedbacks_meta"].fillna(0))]
-    est["nombre_completo"] = est["nombre_completo"].fillna(est["nombre"] if "nombre" in est else "")
-    cols = ["nombre_completo", "documento", "grupo", "franja", "feedbacks_meta", "feedbacks_hechos",
-            "feedbacks_atraso", "estado_feedback"] + [f"F{n}" for n in range(1, TOT + 1)]
-    tabla = est[cols]
-    st.caption(f"{ui.num(len(tabla))} estudiantes · ✓ hecho · ✗ pendiente · – aún no le toca")
-    cfg = {"nombre_completo": st.column_config.TextColumn("Estudiante", pinned=True), "documento": "Documento",
-           "grupo": "Grupo", "franja": "Jornada", "feedbacks_meta": st.column_config.NumberColumn("Meta", format="%d"),
-           "feedbacks_hechos": st.column_config.NumberColumn("Hechos", format="%d"),
-           "feedbacks_atraso": st.column_config.NumberColumn("Pendientes", format="%d"), "estado_feedback": "Estado"}
-    cfg.update({f"F{n}": st.column_config.TextColumn(f"F{n}", width="small") for n in range(1, TOT + 1)})
-    st.dataframe(tabla, hide_index=True, width="stretch", height=min(600, 38 + 35 * max(1, len(tabla))),
-                 column_config=cfg)
-    buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as xw:
-        tabla.rename(columns={"nombre_completo": "Estudiante", "documento": "Documento", "grupo": "Grupo",
-                              "franja": "Jornada", "feedbacks_meta": "Meta", "feedbacks_hechos": "Hechos",
-                              "feedbacks_atraso": "Pendientes", "estado_feedback": "Estado"}
-                     ).to_excel(xw, sheet_name="Estudiantes", index=False)
-        grupos.to_excel(xw, sheet_name="Grupos", index=False)
-    st.download_button("Descargar Excel", buf.getvalue(), f"tcf10_feedbacks_{hoy:%Y%m%d}.xlsx",
-                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                       icon=":material/download:")
+    if ui.sensible_activo():
+        ui.aviso_sensible()
+    else:
+        e1, e2 = st.columns([2, 1], vertical_alignment="bottom")
+        estados = e1.pills("Estado", C.ESTADOS_FEEDBACK, selection_mode="multi", key="fb_estados")
+        solo = e2.toggle("Solo con pendientes", value=False, key="fb_solo")
+        est = comun.con_identidad(base)
+        if estados:
+            est = est[est["estado_feedback"].isin(estados)]
+        if solo:
+            est = est[est["feedbacks_atraso"] > 0]
+        est = est.sort_values(["feedbacks_atraso", "feedbacks_hechos", "grupo"], ascending=[False, True, True])
+        for n in range(1, TOT + 1):  # ✓ hecho · ✗ pendiente (ya le tocaba) · – aún no le toca
+            est[f"F{n}"] = ["✓" if h else ("✗" if n <= m else "–")
+                            for h, m in zip(est[f"fb_{n}"], est["feedbacks_meta"].fillna(0))]
+        est["nombre_completo"] = est["nombre_completo"].fillna(est["nombre"] if "nombre" in est else "")
+        cols = ["nombre_completo", "documento", "grupo", "franja", "feedbacks_meta", "feedbacks_hechos",
+                "feedbacks_atraso", "estado_feedback"] + [f"F{n}" for n in range(1, TOT + 1)]
+        tabla = est[cols]
+        st.caption(f"{ui.num(len(tabla))} estudiantes · ✓ hecho · ✗ pendiente · – aún no le toca")
+        cfg = {"nombre_completo": st.column_config.TextColumn("Estudiante", pinned=True), "documento": "Documento",
+               "grupo": "Grupo", "franja": "Jornada", "feedbacks_meta": st.column_config.NumberColumn("Meta", format="%d"),
+               "feedbacks_hechos": st.column_config.NumberColumn("Hechos", format="%d"),
+               "feedbacks_atraso": st.column_config.NumberColumn("Pendientes", format="%d"), "estado_feedback": "Estado"}
+        cfg.update({f"F{n}": st.column_config.TextColumn(f"F{n}", width="small") for n in range(1, TOT + 1)})
+        st.dataframe(tabla, hide_index=True, width="stretch", height=min(600, 38 + 35 * max(1, len(tabla))),
+                     column_config=cfg)
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as xw:
+            tabla.rename(columns={"nombre_completo": "Estudiante", "documento": "Documento", "grupo": "Grupo",
+                                  "franja": "Jornada", "feedbacks_meta": "Meta", "feedbacks_hechos": "Hechos",
+                                  "feedbacks_atraso": "Pendientes", "estado_feedback": "Estado"}
+                         ).to_excel(xw, sheet_name="Estudiantes", index=False)
+            grupos.to_excel(xw, sheet_name="Grupos", index=False)
+        st.download_button("Descargar Excel", buf.getvalue(), f"tcf10_feedbacks_{hoy:%Y%m%d}.xlsx",
+                           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           icon=":material/download:")
