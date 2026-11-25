@@ -46,6 +46,8 @@ PAGINAS_INTERNAS = [
             url_path="interno-asistencia"),
     st.Page("tablero/5_Consulta_participante.py", title="Consulta", icon=":material/person_search:",
             url_path="interno-consulta"),
+    st.Page("tablero/10_Bases_formacion.py", title="Bases de formación", icon=":material/sync:",
+            url_path="interno-bases-formacion"),
     st.Page("tablero/9_Metodologia.py", title="Cómo se calcula", icon=":material/menu_book:",
             url_path="interno-metodologia"),
 ]
