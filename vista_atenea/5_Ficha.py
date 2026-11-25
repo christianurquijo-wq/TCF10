@@ -186,7 +186,7 @@ if rec is not None and len(rec):
         ["fecha", "curso", "leccion", "recurso", "horas"]].sort_values(["fecha", "curso"], na_position="last")
     st.dataframe(tabla_rec, hide_index=True, width="stretch", height=min(420, 38 + 35 * len(tabla_rec)),
                  column_config={"fecha": st.column_config.DateColumn("Completado", format="DD/MM/YYYY"),
-                                "curso": "Curso", "leccion": "Tema", "recurso": "Recurso",
+                                "curso": "Curso", "leccion": "Lección", "recurso": "Recurso",
                                 "horas": st.column_config.NumberColumn("Duración (h)", format="%.2f")})
 
 # ------------------------------------------------------------------ comparación
