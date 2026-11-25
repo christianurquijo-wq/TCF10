@@ -14,7 +14,7 @@ if correo:
     st.caption(f"Sesión: {correo}")
 
 # ------------------------------------------------------------------ filtros
-base = ui.barra_filtros(df, "cp", ("cohorte", "grupo", "franja"))
+base = ui.barra_filtros(df, "cp", ("cohorte", "perfil", "nivel", "grupo", "franja"))
 if base.empty:
     st.warning("No hay participantes con esos filtros o ese documento.", icon=":material/search_off:")
     st.stop()

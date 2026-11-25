@@ -57,7 +57,7 @@ t_proy, t_pers = ui.pestanas(["Proyección por cohorte", "Personas"], "mp")
 with t_proy:
     st.caption("Las metas y los pagos de arriba son siempre del contrato completo. Los filtros y los clics aplican "
                "a esta proyección y a la lista de personas.")
-    sel = ui.barra_filtros(df, "mp", ("cohorte", "grupo", "franja"))
+    sel = ui.barra_filtros(df, "mp", ("cohorte", "perfil", "nivel", "grupo", "franja"))
     st.markdown("**¿Cuántas personas llegarán a culminar?** · cada barra reparte a las personas de la cohorte "
                 "según su situación hoy")
     dist = (sel.groupby(["cohorte", "riesgo"]).size().rename("personas").reset_index())

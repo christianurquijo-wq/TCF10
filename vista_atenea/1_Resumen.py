@@ -37,6 +37,12 @@ with c[4]:
                f"{ui.pct(desistieron / len(form) if len(form) else None, 1)} de los formalizados", "celeste")
 
 st.write("")
+estilo.seccion("Participantes por programa y nivel")
+st.caption("Formalizados según la Asignación docente: grupos distintos y participantes. Responde a los filtros de "
+           "arriba.")
+st.markdown(ui.tabla_programa_nivel(M.programa_nivel(df)), unsafe_allow_html=True)
+
+st.write("")
 estilo.seccion("Metas del contrato")
 st.caption("Se calculan sobre toda la base, sin filtros. Los índices se liquidan al cierre de las cohortes.")
 pagos = {p["clave"]: p for p in M.pagos(completo)}

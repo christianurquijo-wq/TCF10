@@ -57,3 +57,27 @@ def test_calendario_desde_grupos_sis_y_riesgo_sin_usuario():
     luis = df[(df["id_sis"] < 0) & df["enrolado"]].iloc[0]
     assert luis["riesgo"] == "Alto" and "sin usuario" in M.motivo_riesgo(luis)
     assert any("no tienen usuario en el SIS" in a for a in M.alertas_equipo(df))
+
+
+def test_asignacion_manda_programa_nivel_y_grupo():
+    import pandas as pd
+    from tcf10 import base_atenea as B
+    from tcf10 import config as C
+    from tcf10 import metrics as M
+    valores = [["documento", "grupo", "Programa", "Nivel", "Jornada", "Docente asignado", "Nivel", "Gestor"],
+               ["1001", "M0101", "Marketing Digital y Finanzas con enfoque en IA", "Básico", "Noche", "Ana", "", "Luis"],
+               ["1002", "M0101", "Marketing Digital y Finanzas con enfoque en IA", "Básico", "Noche", "Ana", "", "Luis"],
+               ["1003", "A0206", "Auxiliar de Información y Servicio al Cliente", "Intermedio", "Tarde", "Eva", "", ""]]
+    a = B.asignacion(valores)
+    assert len(a) == 3 and set(a["perfil"]) == {"Marketing y finanzas", "Auxiliar y servicio al cliente"}
+    benef = pd.DataFrame({"huella": B.huella(pd.Series(["1001", "1002", "1003", "1004"])),
+                          "grupo": ["X1", "Sin dato", "A0206", "M0199"], "perfil": "Sin dato", "nivel": "Sin dato",
+                          "docente": "Sin dato", "gestor": "Sin dato", "franja": "Sin dato", "enrolado": True})
+    b = B.aplicar_asignacion(benef, a, C.etiqueta_franja)
+    assert b["grupo"].tolist() == ["M0101", "M0101", "A0206", "M0199"]          # 1004 no está: conserva el SIS
+    assert b["en_asignacion"].tolist() == [True, True, True, False]
+    assert b.loc[0, "franja"].startswith("Noche") and b.loc[2, "gestor"] == "Sin dato"
+    t = M.programa_nivel(b).set_index(["programa", "nivel", "tipo"])
+    assert t.loc[("Marketing y finanzas", "Básico", "detalle"), "grupos"] == 1
+    assert t.loc[("Marketing y finanzas", "Básico", "detalle"), "participantes"] == 2
+    assert t.loc[("Total", "", "total"), "grupos"] == 3 and t.loc[("Total", "", "total"), "participantes"] == 4

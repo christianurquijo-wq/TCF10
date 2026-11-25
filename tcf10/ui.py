@@ -359,7 +359,7 @@ def pestanas(nombres: list[str], clave: str):
 
 # ------------------------------------------------------------------ vista interna: barra única de filtros
 ETIQUETAS_BARRA = {"cohorte": "Cohorte", "grupo": "Grupo", "franja": "Jornada", "docente": "Docente",
-                   "perfil": "Perfil", "nivel": "Nivel"}
+                   "perfil": "Programa", "nivel": "Nivel"}
 
 
 def _limpiar_todo(pagina: str, columnas: tuple) -> None:
@@ -383,7 +383,7 @@ def _por_documento(df: pd.DataFrame, texto: str) -> pd.DataFrame:
     return df[docs.str.contains(digitos, regex=False).to_numpy()]
 
 
-def barra_filtros(df: pd.DataFrame, pagina: str, columnas=("cohorte", "grupo", "franja"),
+def barra_filtros(df: pd.DataFrame, pagina: str, columnas=("cohorte", "perfil", "nivel", "grupo", "franja"),
                   documento: bool = True) -> pd.DataFrame:
     """Una sola barra de filtros por página de la vista interna. Lo elegido se conserva al cambiar de página;
     los clics en las gráficas aparecen aquí mismo y se quitan con «Limpiar filtros»."""
@@ -391,7 +391,8 @@ def barra_filtros(df: pd.DataFrame, pagina: str, columnas=("cohorte", "grupo", "
     with st.container(border=True, key="barra_filtros"):
         cols = st.columns(len(columnas) + (1 if documento else 0))
         for col, c in zip(cols, columnas):
-            opciones = sorted(df[c].dropna().astype(str).unique(), key=C.orden_franja if c == "franja" else None)
+            opciones = sorted(df[c].dropna().astype(str).unique(), key=C.orden_franja if c == "franja" else
+                              (lambda n: ((["Básico", "Intermedio", "Avanzado"] + [n]).index(n), n)) if c == "nivel" else None)
             k = f"bf_{c}"
             guardado = st.session_state.get(k, st.session_state.get(f"bfv_{c}", []))
             st.session_state[k] = [v for v in (guardado or []) if v in opciones]
@@ -516,3 +517,40 @@ def fecha_corta(d) -> str:
 
 
 __all__ = ["C"]
+
+
+# ------------------------------------------------------------------ tabla programa × nivel (ambas vistas)
+def tabla_programa_nivel(t: pd.DataFrame) -> str:
+    """HTML de la tabla de metrics.programa_nivel(): programas con su subtotal arriba y niveles debajo, total al
+    final. Paleta Atenea; se lee igual en escritorio y celular."""
+    css = (
+        "<style>.tpn{width:100%;border-collapse:separate;border-spacing:0;font-size:.95rem;border-radius:14px;"
+        "overflow:hidden;box-shadow:0 1px 3px rgba(20,20,57,.08);border:1px solid #D3E7EF}"
+        ".tpn th{background:#141439;color:#fff;text-align:left;padding:10px 14px;font-weight:600;"
+        "font-family:'Barlow Semi Condensed',sans-serif;letter-spacing:.04em}"
+        ".tpn th.n,.tpn td.n{text-align:right;width:120px}"
+        ".tpn td{padding:8px 14px;border-top:1px solid #E3EEF3;color:#141439}"
+        ".tpn tr.sub td{background:#EEF6F9;font-weight:700}"
+        ".tpn tr.det td:first-child{padding-left:30px;color:#3C4170}"
+        ".tpn tr.tot td{background:#05247D;color:#fff;font-weight:700}"
+        "@media (max-width:640px){.tpn{font-size:.85rem}.tpn th.n,.tpn td.n{width:80px}}</style>")
+    filas = []
+    for _, r in t.iterrows():
+        g, p_ = num(r["grupos"]), num(r["participantes"])
+        if r["tipo"] == "subtotal":
+            filas.append(f"<tr class='sub'><td>{html.escape(str(r['programa']))}</td><td class='n'>{g}</td>"
+                         f"<td class='n'>{p_}</td></tr>")
+        elif r["tipo"] == "total":
+            filas.append(f"<tr class='tot'><td>Total</td><td class='n'>{g}</td><td class='n'>{p_}</td></tr>")
+    # niveles debajo de su programa: se reordena (subtotal arriba, detalle abajo)
+    salida = []
+    for prog in t.loc[t["tipo"].eq("subtotal"), "programa"]:
+        sub = t[(t["programa"] == prog) & t["tipo"].eq("subtotal")].iloc[0]
+        salida.append(f"<tr class='sub'><td>{html.escape(str(prog))}</td><td class='n'>{num(sub['grupos'])}</td>"
+                      f"<td class='n'>{num(sub['participantes'])}</td></tr>")
+        for _, d in t[(t["programa"] == prog) & t["tipo"].eq("detalle")].iterrows():
+            salida.append(f"<tr class='det'><td>{html.escape(str(d['nivel']))}</td><td class='n'>{num(d['grupos'])}"
+                          f"</td><td class='n'>{num(d['participantes'])}</td></tr>")
+    salida += [f for f in filas if "class='tot'" in f]
+    return (css + "<table class='tpn'><thead><tr><th>Programa / nivel</th><th class='n'>Grupos</th>"
+            "<th class='n'>Participantes</th></tr></thead><tbody>" + "".join(salida) + "</tbody></table>")

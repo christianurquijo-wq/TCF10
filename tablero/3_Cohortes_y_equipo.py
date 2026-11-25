@@ -11,7 +11,7 @@ ui.inicio("Cohortes y equipo", f"Grupos de hasta {C.MAX_ACTIVOS_POR_GRUPO} activ
           f"{C.MAX_GRUPOS_POR_DOCENTE} grupos simultáneos por docente, {C.MIN_GESTORES_POR_DOCENTE} gestor por "
           f"docente y al menos {C.MIN_FRANJAS} franjas horarias")
 df = ui.datos()
-sel = ui.barra_filtros(df, "eq", ("cohorte", "grupo", "franja", "docente"), documento=False)
+sel = ui.barra_filtros(df, "eq", ("cohorte", "perfil", "nivel", "grupo", "franja", "docente"), documento=False)
 
 # ------------------------------------------------------------------ alertas del equipo (siempre visibles)
 alertas = M.alertas_equipo(df)
@@ -29,7 +29,49 @@ if alertas:
 else:
     st.success("Grupos, docentes, gestores y franjas dentro de lo que pide el contrato.", icon=":material/check_circle:")
 
-t_grupos, t_doc, t_coh, t_alertas = ui.pestanas(["Grupos", "Docentes", "Cohortes", "Alertas"], "eq")
+t_pn, t_grupos, t_doc, t_coh, t_alertas = ui.pestanas(["Programa y nivel", "Grupos", "Docentes", "Cohortes",
+                                                       "Alertas"], "eq")
+
+with t_pn:
+    from tcf10 import data
+    aviso = data.aviso_asignacion()
+    if aviso:
+        st.warning(aviso, icon=":material/link_off:")
+    st.caption("Formalizados por programa y nivel según la Asignación docente (pestaña «Base de estudiantes»): "
+               "grupos distintos y participantes. Responde a los filtros de arriba.")
+    tpn = M.programa_nivel(sel)
+    izq, der = st.columns([1.4, 1])
+    with izq:
+        st.markdown(ui.tabla_programa_nivel(tpn), unsafe_allow_html=True)
+    with der:
+        det = tpn[tpn["tipo"].eq("detalle")]
+        if not det.empty:
+            fig = go.Figure()
+            for prog, color in zip(det["programa"].unique(), [ui.AZUL, ui.NARANJA, ui.NOCHE]):
+                d = det[det["programa"].eq(prog)]
+                fig.add_bar(x=d["nivel"], y=d["participantes"], name=prog, marker_color=color,
+                            text=d["participantes"], textposition="outside",
+                            customdata=d["grupos"], hovertemplate="%{x}: %{y} participantes · %{customdata} grupos"
+                                                                  "<extra></extra>")
+            fig.update_layout(barmode="group", xaxis_title=None, yaxis_title=None, separators=",.")
+            ui.mostrar(fig, 340)
+    if "en_asignacion" in sel and "grupo_sis" in sel:  # solo con la Asignación docente conectada
+        f = sel[sel["enrolado"]]
+        dif = f[f["grupo_sis"].astype(str).ne(f["grupo"].astype(str))
+                & ~f["grupo_sis"].astype(str).isin(["Sin dato", ""])]
+        sin_asig = f[~f["en_asignacion"].fillna(False).astype(bool)]
+        if len(dif) or len(sin_asig):
+            with st.expander(f"Diferencias con el SIS: {len(dif)} con otro grupo en el SIS · {len(sin_asig)} "
+                             "formalizados sin fila en la Asignación docente"):
+                st.caption("Manda la Asignación docente; revisar si el SIS o la asignación deben corregirse.")
+                vista = pd.concat([dif.assign(Motivo="Grupo distinto en el SIS"),
+                                   sin_asig.assign(Motivo="Sin fila en la Asignación docente")])
+                vista = vista.assign(persona=vista["nombre"].map(ui.iniciales))
+                st.dataframe(vista[["Motivo", "id_sis", "persona", "perfil", "nivel", "grupo", "grupo_sis"]],
+                             hide_index=True, use_container_width=True, column_config={
+                                 "id_sis": st.column_config.NumberColumn("ID SIS", format="%d"), "persona": "Iniciales",
+                                 "perfil": "Programa", "nivel": "Nivel", "grupo": "Grupo (asignación)",
+                                 "grupo_sis": "Grupo en el SIS"})
 
 with t_grupos:
     g = M.grupos(sel).sort_values("activos", ascending=False)

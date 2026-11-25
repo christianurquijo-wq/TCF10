@@ -9,7 +9,7 @@ from tcf10 import ui
 ui.inicio("Avance y riesgo", f"Horas válidas frente a la meta de {ui.num(C.HORAS_CULMINACION)} h "
           f"(70 % de {ui.num(C.HORAS_TOTALES)} h) y alertas tempranas de deserción")
 df = ui.datos()
-df = ui.barra_filtros(df, "av", ("cohorte", "grupo", "franja", "docente"))
+df = ui.barra_filtros(df, "av", ("cohorte", "perfil", "nivel", "grupo", "franja", "docente"))
 en_curso = df[df["riesgo"].isin(["Alto", "Medio", "Bajo"])]
 
 c1, c2, c3, c4 = st.columns(4)

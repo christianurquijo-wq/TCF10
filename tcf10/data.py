@@ -377,6 +377,40 @@ def _base_formalizacion() -> pd.DataFrame:
         raise ErrorConfiguracion(str(e)) from e
 
 
+ASIGNACION_SHEET_ID = "1RiZjIhhQaVx9694DxF4XNacfzC4DOQ_l4P9Et8fSvPc"  # Asignación docente · TC Formación
+
+
+@st.cache_data(ttl=TTL, show_spinner="Cargando asignación docente…")
+def _asignacion() -> tuple[pd.DataFrame, str]:
+    """(programa/nivel/grupo por persona desde «Asignación docente», aviso). Sin acceso: tabla vacía y el aviso;
+    la app sigue con los grupos del SIS. Secrets opcionales: [tcf10] asignacion_sheet_id, asignacion_pestana."""
+    import gspread
+    from tcf10 import base_atenea
+    cfg = _cfg()
+    sid = cfg.get("asignacion_sheet_id") or ASIGNACION_SHEET_ID
+    pestana = cfg.get("asignacion_pestana", "Base de estudiantes")
+    try:
+        gc = gspread.authorize(_credenciales(["https://www.googleapis.com/auth/spreadsheets.readonly"]))
+        ws = next(w for w in gc.open_by_key(sid).worksheets() if _plano(w.title) == _plano(pestana))
+        return base_atenea.asignacion(ws.get_all_values()), ""
+    except StopIteration:
+        return pd.DataFrame(), f"No encontré la pestaña «{pestana}» en Asignación docente."
+    except Exception as e:  # noqa: BLE001
+        correo = dict(st.secrets.get("gcp_service_account", {})).get("client_email", "la cuenta de servicio")
+        return pd.DataFrame(), (f"No se pudo leer Asignación docente ({type(e).__name__}). Compártela como Lector "
+                                f"con {correo}. Mientras tanto, programa y nivel salen de Formalización y el grupo "
+                                "del SIS.")
+
+
+def aviso_asignacion() -> str:
+    if modo() != "completo":
+        return ""
+    try:
+        return _asignacion()[1]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _cliente_bq():
     from google.cloud import bigquery
     creds = _credenciales(["https://www.googleapis.com/auth/bigquery"], _seccion_bq())
@@ -567,6 +601,9 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
         if franjas is not None and len(franjas):
             mapa = franjas.set_index("grupo")["franja"]
             benef["franja"] = benef["grupo"].map(mapa).fillna(benef["franja"])
+        # Programa, nivel y grupo: manda la Asignación docente (nov-2026). Fechas y asistencia siguen del SIS.
+        from tcf10 import config as C
+        benef = base_atenea.aplicar_asignacion(benef, _asignacion()[0], C.etiqueta_franja)
     else:
         benef = limpiar_beneficiarios(_leer_sheet(cfg.get("pestana_beneficiarios", "BENEFICIARIOS")))
         cohortes = limpiar_cohortes(_leer_sheet(cfg.get("pestana_cohortes", "COHORTES")))
@@ -695,5 +732,5 @@ def _completar_grupo(benef: pd.DataFrame, avance: pd.DataFrame) -> pd.DataFrame:
 
 
 def refrescar() -> None:
-    for f in (_leer_sheet, _sis_sheet, _formalizacion_cruda, _base_formalizacion, identidades):
+    for f in (_leer_sheet, _sis_sheet, _formalizacion_cruda, _base_formalizacion, identidades, _asignacion):
         f.clear()

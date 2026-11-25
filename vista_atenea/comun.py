@@ -11,7 +11,7 @@ from tcf10 import config as C
 from tcf10 import data
 from tcf10 import ui
 
-FILTROS = [("cohorte", "Cohorte"), ("grupo", "Grupo"), ("franja", "Franja"), ("nivel", "Nivel")]
+FILTROS = [("cohorte", "Cohorte"), ("perfil", "Programa"), ("nivel", "Nivel"), ("grupo", "Grupo"), ("franja", "Franja")]
 ORDEN_ESTADO = ["En formación", "Culminó", "Por iniciar", "Desistió", "No formalizado"]
 COLOR_ESTADO = {"En formación": ui.AZUL, "Culminó": ui.NOCHE, "Por iniciar": ui.CELESTE,
                 "Desistió": ui.GRIS, "No formalizado": "#DCE3EA"}
@@ -60,7 +60,8 @@ def filtros_banda(df: pd.DataFrame) -> None:
     base = df
     for c, (col, etiqueta) in zip(cols, FILTROS):
         opciones = sorted(base[col].dropna().astype(str).unique(),
-                          key=C.orden_franja if col == "franja" else None)
+                          key=C.orden_franja if col == "franja" else
+                          (lambda n: ((["Básico", "Intermedio", "Avanzado"] + [n]).index(n), n)) if col == "nivel" else None)
         sel = c.multiselect(etiqueta, opciones, key=f"at_{col}", placeholder="Todos")
         if sel:
             base = base[base[col].astype(str).isin(sel)]

@@ -149,3 +149,55 @@ def calendario(benef: pd.DataFrame, grupos_sis: pd.DataFrame) -> tuple[pd.DataFr
     if faltan:
         coh = pd.concat([coh, pd.DataFrame({"cohorte": faltan})], ignore_index=True)
     return b, coh.sort_values("fecha_inicio", na_position="last").reset_index(drop=True)
+
+
+# ------------------------------------------------------------------ Asignación docente (programa, nivel y grupo)
+ORDEN_NIVEL = ["Básico", "Intermedio", "Avanzado"]
+
+
+def asignacion(valores: list[list[str]]) -> pd.DataFrame:
+    """Pestaña «Base de estudiantes» del Sheet «Asignación docente · Talento Capital Formación»: una fila por
+    estudiante con documento, grupo, Programa, Nivel, Jornada, Docente asignado y Gestor. Devuelve, SIN el documento
+    (solo su huella): huella, grupo, perfil, nivel, franja, docente, gestor."""
+    i = next((i for i, f in enumerate(valores[:5]) if "documento" in {_plano(c) for c in f}), None)
+    if i is None:
+        raise ValueError("La pestaña de asignación no tiene la columna «documento».")
+    enc = [_plano(c) for c in valores[i]]
+    filas = valores[i + 1:]
+
+    def col(*nombres):
+        for n in nombres:
+            if n in enc:  # la primera aparición (la pestaña repite «Nivel»)
+                j = enc.index(n)
+                return pd.Series([str(f[j]).strip() if j < len(f) else "" for f in filas], dtype="string")
+        return pd.Series([""] * len(filas), dtype="string")
+
+    jornada = col("jornada")
+    df = pd.DataFrame({
+        "huella": huella(col("documento")),
+        "grupo": col("grupo"),
+        "perfil": col("programa", "curso").map(lambda t: tematica_corta(t) if t else ""),
+        "nivel": col("nivel").str.title(),
+        "franja": jornada.str.title(),
+        "docente": col("docente asignado", "docente"),
+        "gestor": col("gestor"),
+    })
+    df = df[df["huella"].notna() & df["grupo"].ne("")]
+    return df.drop_duplicates("huella").reset_index(drop=True)
+
+
+def aplicar_asignacion(benef: pd.DataFrame, asig: pd.DataFrame, etiqueta_franja) -> pd.DataFrame:
+    """Programa, nivel, grupo, jornada, docente y gestor de la Asignación docente mandan sobre Formalización/SIS
+    (nov-2026). El grupo principal del SIS sigue disponible en «grupo_sis» (viene del avance) para comparar."""
+    b = benef.copy()
+    if asig is None or asig.empty or "huella" not in b:
+        return b
+    a = asig.set_index("huella")
+    for col in ("grupo", "perfil", "nivel", "docente", "gestor", "franja"):
+        mapa = a[col].replace("", pd.NA).dropna().to_dict()
+        nuevo = [mapa.get(h) for h in b["huella"]]
+        if col == "franja":
+            nuevo = [etiqueta_franja(v) if v else None for v in nuevo]
+        b[col] = [n if n else actual for n, actual in zip(nuevo, b[col])]
+    b["en_asignacion"] = b["huella"].isin(a.index)
+    return b

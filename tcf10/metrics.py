@@ -398,3 +398,27 @@ def feedback(df: pd.DataFrame, fb: pd.DataFrame, asis: pd.DataFrame, hoy: pd.Tim
                                        df["feedbacks_meta"].fillna(0))]
         df["motivo_critico"] = ["; ".join(x for x in (m, e) if x) for m, e in zip(df["motivo_critico"].fillna(""), extra)]
     return df
+
+
+def programa_nivel(df: pd.DataFrame) -> pd.DataFrame:
+    """Formalizados por programa y nivel: grupos distintos y participantes, con subtotal por programa y total.
+    Columnas: programa, nivel, grupos, participantes, tipo (detalle | subtotal | total)."""
+    f = df[df["enrolado"]] if "enrolado" in df else df
+    orden_n = {n: i for i, n in enumerate(["Básico", "Intermedio", "Avanzado"])}
+
+    def grupos(s):
+        return int(s[~s.astype(str).isin(["Sin dato", "", "nan"])].nunique())
+
+    filas = []
+    for prog in sorted(f["perfil"].astype(str).unique()):
+        p = f[f["perfil"].astype(str).eq(prog)]
+        niveles = sorted(p["nivel"].astype(str).unique(), key=lambda n: (orden_n.get(n, 9), n))
+        for n in niveles:
+            x = p[p["nivel"].astype(str).eq(n)]
+            filas.append({"programa": prog, "nivel": n, "grupos": grupos(x["grupo"]), "participantes": len(x),
+                          "tipo": "detalle"})
+        filas.append({"programa": prog, "nivel": "", "grupos": grupos(p["grupo"]), "participantes": len(p),
+                      "tipo": "subtotal"})
+    filas.append({"programa": "Total", "nivel": "", "grupos": grupos(f["grupo"]), "participantes": len(f),
+                  "tipo": "total"})
+    return pd.DataFrame(filas)

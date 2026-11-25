@@ -13,7 +13,7 @@ from tcf10 import ui
 ui.inicio("Asistencia y plataforma", "Lo que registra el SIS: asistencia por sesión, registro de asistencia por "
           "parte de los docentes y avance por curso")
 df = ui.datos()
-base = ui.barra_filtros(df, "ap", ("cohorte", "grupo", "franja", "docente"))
+base = ui.barra_filtros(df, "ap", ("cohorte", "perfil", "nivel", "grupo", "franja", "docente"))
 ids = tuple(sorted(int(x) for x in base["id_sis"].dropna().unique()))
 if not ids:
     st.info("No hay beneficiarios con esos filtros.")

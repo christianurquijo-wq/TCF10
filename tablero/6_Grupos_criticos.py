@@ -27,7 +27,7 @@ hoy = comun.hoy()
 if "critico" not in df:  # tabla de una versión anterior en memoria: se tipifica aquí
     from tcf10 import metrics as M
     df = M.tipificar(df, hoy)
-df = ui.barra_filtros(df, "gc", ("cohorte", "grupo", "franja", "docente"))
+df = ui.barra_filtros(df, "gc", ("cohorte", "perfil", "nivel", "grupo", "franja", "docente"))
 # En formación: formalizados, no retirados, que aún no culminan y cuyo grupo ya inició.
 form = df[df["enrolado"] & ~df["retirado"] & df["cohorte_iniciada"]].copy()
 en_curso = form[~form["culmino"] & ~form["cohorte_cerrada"]]
