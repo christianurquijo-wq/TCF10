@@ -247,16 +247,13 @@ def boton_descarga(etiqueta: str, tabla, archivo: str, hoja: str, titulo: str = 
 def bloque_vistas_crudas() -> None:
     """Descarga en un ZIP de las vistas crudas del SIS (CSV). Se genera solo al pedirlo y queda en el registro."""
     from vista_atenea import legal
-    st.markdown("**Vistas del SIS en crudo (CSV)**")
-    st.caption(f"Un ZIP con {len(data.VISTAS_CRUDAS)} archivos CSV, uno por vista de la plataforma académica, tal cual "
-               "están en BigQuery y sin filtros: " + ", ".join(data.VISTAS_CRUDAS) + ". Incluye datos personales "
-               "de contacto y actividad: trátalo como información confidencial.")
+    st.markdown("**Descargar bases de datos**")
     if data.modo_demo():
         st.info("Disponible solo con la conexión a BigQuery (no en modo demostración).", icon=":material/info:")
         return
     zip_ok = st.session_state.get("seg_zip_crudo")
     if not zip_ok:
-        if st.button("Preparar ZIP de vistas SIS", icon=":material/folder_zip:", key="at_zip_preparar"):
+        if st.button("Preparar ZIP de bases de datos", icon=":material/folder_zip:", key="at_zip_preparar"):
             quien, cuando = usuario_actual() or "usuario no identificado", ahora().strftime("%d/%m/%Y %H:%M")
             leeme = (f"CONFIDENCIAL · Descargado por {quien} el {cuando} (hora Colombia).\n"
                      f"Vistas crudas del SIS de {legal.PROGRAMA} ({data._cfg().get('sis_dataset') or data.DATASET_CRUDO}).\n"
@@ -285,5 +282,5 @@ def bloque_vistas_crudas() -> None:
                   f"vistas SIS crudas (ZIP) · {sum(filas.values())} filas")
         st.session_state.pop("seg_zip_crudo", None)  # no se guarda en memoria más de lo necesario
 
-    st.download_button("Descargar ZIP de vistas SIS", datos, f"TCF10_vistas_SIS_{sello}.zip", "application/zip",
+    st.download_button("Descargar ZIP de bases de datos", datos, f"TCF10_vistas_SIS_{sello}.zip", "application/zip",
                        icon=":material/download:", key="at_zip_descargar", type="primary", on_click=_descargado)
