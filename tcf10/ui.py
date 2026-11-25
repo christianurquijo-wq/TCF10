@@ -26,7 +26,6 @@ HOY_DEMO = pd.Timestamp("2026-11-13")  # fecha con la que se generaron los datos
 
 CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap');
 .block-container {padding-top: 1.6rem;}
 /* Vista interna: tarjetas y pestañas que se adaptan a pantallas pequeñas */
 @media (max-width: 760px) {
@@ -55,7 +54,7 @@ h2, h3 {font-weight: 600;}
            border-bottom: 2px solid #B7D9E6; padding-bottom: 10px; margin-bottom: 6px;}
 .cabecera.compacta {border-bottom: 1px solid #D3E7EF; padding-bottom: 6px;}
 .cabecera.compacta h1 {font-size: 1.7rem;}
-.cabecera .eyebrow {font-size:.8rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:#E55B0E;}
+.cabecera .eyebrow {font-size:.8rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:#B5460A;}
 .cabecera h1 {margin:0; padding:0; font-size:2.1rem; line-height:1.1;}
 .cabecera .bajada {color:#3C4170; font-size:.95rem; margin-top:4px;}
 .cabecera img {height:52px;}
@@ -286,6 +285,45 @@ def dark_layout(fig, height: int = 340):
     fig.update_xaxes(gridcolor="#E3EEF3", linecolor="#B7D9E6", zerolinecolor="#B7D9E6")
     fig.update_yaxes(gridcolor="#E3EEF3", linecolor="#B7D9E6", zerolinecolor="#B7D9E6")
     return fig
+
+
+def datos_grafica(fig) -> pd.DataFrame:
+    """Los datos de una gráfica de Plotly en una tabla (alternativa en texto para lectores de pantalla y teclado)."""
+    filas = []
+    for t in fig.data:
+        tipo = getattr(t, "type", "")
+        if tipo in ("bar", "scatter", "histogram"):
+            horizontal = getattr(t, "orientation", None) == "h"
+            cat = t.y if horizontal else t.x
+            val = t.x if horizontal else t.y
+            if cat is None or val is None:
+                continue
+            nombre = t.name or ""
+            if nombre and getattr(t, "showlegend", None) is False and len(list(cat)) <= 1:
+                continue  # trazas solo para la leyenda (líneas de meta)
+            for c, v in zip(list(cat), list(val)):
+                filas.append({"Serie": nombre, "Categoría": c, "Valor": v})
+        elif tipo == "pie":
+            for c, v in zip(list(t.labels or []), list(t.values or [])):
+                filas.append({"Serie": t.name or "", "Categoría": c, "Valor": v})
+    out = pd.DataFrame(filas, columns=["Serie", "Categoría", "Valor"])
+    if not out.empty and out["Serie"].nunique() <= 1:
+        out = out.drop(columns="Serie")
+    return out
+
+
+def grafica_atenea(fig, height: int = 340, descripcion: str = "") -> None:
+    """Gráfica de la vista Atenea, accesible: bordes oscuros en barras (contraste ≥ 3:1 aunque el color de relleno
+    sea claro), sin barra de herramientas y con sus datos en texto debajo («Ver datos de la gráfica»)."""
+    fig = dark_layout(fig, height)
+    fig.update_traces(selector=dict(type="bar"), marker_line_color=NOCHE, marker_line_width=0.6)
+    if descripcion:
+        st.caption(descripcion)
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False, "responsive": True})
+    tabla = datos_grafica(fig)
+    if not tabla.empty:
+        with st.expander("Ver datos de la gráfica", icon=":material/table:"):
+            st.dataframe(tabla, hide_index=True, width="stretch", height=min(400, 38 + 35 * len(tabla)))
 
 
 # ------------------------------------------------------------------ vista interna: estilo de gráficas

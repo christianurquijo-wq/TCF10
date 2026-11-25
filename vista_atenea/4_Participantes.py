@@ -1,13 +1,11 @@
 """Listado de participantes con nombre y documento (solo con sesión autorizada) y ficha individual."""
-import io
-
 import pandas as pd
 import streamlit as st
 
 from tcf10 import config as C
 from tcf10 import data
 from tcf10 import ui
-from vista_atenea import comun, estilo
+from vista_atenea import comun, estilo, seguridad
 
 estilo.pagina("Participantes", "Estado de formación, asistencia y horas de cada participante")
 df = comun.filtrado(comun.todos())
@@ -45,7 +43,8 @@ cols = ["nombre_completo", "tipo_documento", "documento", "cohorte", "grupo", "f
         "estado_atenea", "sesiones", "asistencia", "horas_sinc_val", "horas_asinc_val", "horas_validas",
         "avance_meta", "ultima_actividad"]
 vista = df.sort_values(["cohorte", "grupo", "nombre_completo"])[cols + ["id_sis"]].reset_index(drop=True)
-st.caption(f"{ui.num(len(vista))} participantes · selecciona una fila para abrir su ficha integral")
+st.caption(f"{ui.num(len(vista))} participantes · selecciona una fila para abrir su ficha integral (con teclado: "
+           "pestaña «Ficha», buscador por nombre o documento)")
 evento = st.dataframe(
     vista[cols], hide_index=True, width="stretch", height=460, on_select="rerun", selection_mode="single-row",
     key="at_tabla",
@@ -61,18 +60,15 @@ evento = st.dataframe(
         "ultima_actividad": st.column_config.DateColumn("Última actividad", format="DD/MM/YYYY"),
     })
 
-buf = io.BytesIO()
 exportar = vista[cols].rename(columns={
     "nombre_completo": "Nombre", "tipo_documento": "Tipo documento", "documento": "Documento", "cohorte": "Cohorte",
     "grupo": "Grupo", "franja": "Franja", "nivel": "Nivel", "perfil": "Programa", "estado_atenea": "Estado",
     "sesiones": "Sesiones asistidas", "asistencia": "% asistencia", "horas_sinc_val": "Horas sincrónicas",
     "horas_asinc_val": "Horas asincrónicas", "horas_validas": "Horas válidas", "avance_meta": "% avance a 63 h",
     "ultima_actividad": "Última actividad"})
-with pd.ExcelWriter(buf, engine="openpyxl") as xw:
-    exportar.round({c: 1 for c in exportar.select_dtypes("number").columns}).to_excel(
-        xw, sheet_name="Participantes", index=False)
-st.download_button("Descargar Excel", buf.getvalue(), "TCF10_participantes.xlsx",
-                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", icon=":material/download:")
+exportar = exportar.round({c: 1 for c in exportar.select_dtypes("number").columns})
+seguridad.boton_descarga("Descargar Excel", exportar, "TCF10_participantes.xlsx", "Participantes",
+                         titulo="TCF10 · Participantes", clave="at_dl_participantes")
 
 # ------------------------------------------------------------------ ir a la ficha integral
 filas = evento.selection.rows if evento and evento.selection else []

@@ -1,6 +1,7 @@
 # Identidad visual Agencia Atenea (Manual de marca 2026): azul noche #141439, azules #05247D / #2051A0,
 # azul claro #B7D9E6 y naranjas #EF6F18 / #E55B0E. Tipografía de marca: Museo Sans Condensed (licenciada);
-# en la web se usa Barlow Semi Condensed (Google Fonts), de proporciones parecidas.
+# en la web se usa Barlow Semi Condensed (licencia OFL), de proporciones parecidas. nov-2026: la fuente se sirve
+# desde la propia app (static/fonts) para no enviar datos de navegación a Google Fonts.
 [theme]
 base = "light"
 primaryColor = "#E55B0E"
@@ -10,9 +11,34 @@ textColor = "#141439"
 linkColor = "#2051A0"
 borderColor = "#D3E7EF"
 baseRadius = "0.6rem"
-font = "Barlow Semi Condensed:https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap"
-headingFont = "Barlow Semi Condensed:https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap"
-chartCategoricalColors = ["#2051A0", "#E55B0E", "#141439", "#B7D9E6", "#EF6F18", "#05247D"]
+font = "Barlow Semi Condensed, sans-serif"
+headingFont = "Barlow Semi Condensed, sans-serif"
+# El celeste #B7D9E6 va de último: sobre blanco no alcanza el contraste 3:1 que pide WCAG para gráficos.
+chartCategoricalColors = ["#2051A0", "#E55B0E", "#141439", "#05247D", "#EF6F18", "#B7D9E6"]
+
+[[theme.fontFaces]]
+family = "Barlow Semi Condensed"
+url = "app/static/fonts/barlow-semi-condensed-latin-400-normal.woff2"
+weight = 400
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Barlow Semi Condensed"
+url = "app/static/fonts/barlow-semi-condensed-latin-500-normal.woff2"
+weight = 500
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Barlow Semi Condensed"
+url = "app/static/fonts/barlow-semi-condensed-latin-600-normal.woff2"
+weight = 600
+style = "normal"
+
+[[theme.fontFaces]]
+family = "Barlow Semi Condensed"
+url = "app/static/fonts/barlow-semi-condensed-latin-700-normal.woff2"
+weight = 700
+style = "normal"
 
 [theme.sidebar]
 backgroundColor = "#141439"
@@ -22,6 +48,7 @@ borderColor = "#2A2A5C"
 
 [server]
 headless = true
+enableStaticServing = true   # sirve static/ (fuente y política de datos de Atenea, ambos públicos)
 
 [browser]
 gatherUsageStats = false

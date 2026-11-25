@@ -45,7 +45,7 @@ fig.update_layout(xaxis=dict(type="category", title=None),
                   yaxis=dict(title="% asistencia", tickformat=".0%", range=[0, 1]),
                   yaxis2=dict(title="Asistencias", overlaying="y", side="right", showgrid=False),
                   legend=dict(orientation="h", y=1.12), separators=",.")
-st.plotly_chart(ui.dark_layout(fig, 340), width="stretch")
+ui.grafica_atenea(fig, 340)
 
 franja_grupo = df.drop_duplicates("grupo").set_index("grupo")["franja"]
 g = asis.groupby("grupo", as_index=False)[["asistieron", "no_asistieron", "sin_registro"]].sum()
@@ -60,7 +60,7 @@ with izq:
                  color_discrete_sequence=[ui.AZUL], labels={"pct": "% asistencia", "franja": ""})
     fig.update_traces(texttemplate="%{text:.0%}", textposition="outside")
     fig.update_layout(xaxis=dict(tickformat=".0%", range=[0, 1.1]))
-    st.plotly_chart(ui.dark_layout(fig, 60 + 45 * len(f)), width="stretch")
+    ui.grafica_atenea(fig, 60 + 45 * len(f))
 with der:
     st.subheader("Por grupo")
     g["pct"] = g["pct"] * 100

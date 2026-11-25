@@ -14,15 +14,24 @@ TONOS = {  # fondo, texto, texto secundario
     "noche": (NOCHE, "#FFFFFF", "#B7D9E6"),
     "azul": (AZUL, "#FFFFFF", "#DCEBF3"),
     "profundo": (AZUL_PROFUNDO, "#FFFFFF", "#B7D9E6"),
-    "naranja": (NARANJA, "#FFFFFF", "#FFE3D3"),
+    "naranja": (NARANJA, NOCHE, NOCHE),  # texto blanco sobre naranja = 3,6:1 (no cumple AA); azul noche = 4,9:1
     "celeste": (CELESTE, NOCHE, "#2A2F5E"),
     "gris": ("#E9EDF3", NOCHE, "#4A4F78"),
 }
 
 CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap');
 [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] {display:none;}
+/* Accesibilidad (WCAG 2.1 AA, nov-2026) */
+:focus-visible {outline: 3px solid #EF6F18 !important; outline-offset: 2px !important;}
+[data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {color:#141439 !important;}
+[data-testid="stBaseButton-primary"] p, [data-testid="stBaseButton-primaryFormSubmit"] p {color:#141439 !important;
+    font-weight:600;}
+/* Las tablas no se descargan desde su barra: la única descarga es el Excel con marca de agua y registro */
+button[aria-label^="Download as CSV"], [data-testid="stElementToolbarButton"]:has(button[aria-label^="Download"]) {
+    display:none !important;}
+.pie-legal {border-top:1px solid #D3E7EF; margin-top:28px; padding-top:10px; color:#4A4F78; font-size:.85rem;}
+.pie-legal a {color:#2051A0;}
 .block-container {padding-top: 3.2rem; max-width: 1320px;}
 h1, h2, h3 {font-family:'Barlow Semi Condensed', sans-serif; color:#141439;}
 /* banda institucional (contenedor con key="banda") */
@@ -35,7 +44,7 @@ h1, h2, h3 {font-family:'Barlow Semi Condensed', sans-serif; color:#141439;}
 .banda-titulo {font-family:'Barlow Semi Condensed', sans-serif; font-size:2.3rem; font-weight:700; color:#fff;
                line-height:1.05; margin:2px 0 4px 0;}
 .banda-bajada {color:#B7D9E6; font-size:.95rem;}
-.banda-interna {background:#E55B0E; color:#fff; border-radius:6px; padding:2px 8px; margin-right:6px;
+.banda-interna {background:#E55B0E; color:#141439; border-radius:6px; padding:2px 8px; margin-right:6px;
                 letter-spacing:.08em;}
 .banda-lado {display:flex; flex-direction:column; align-items:flex-end; gap:10px; flex-shrink:0;}
 @media (max-width: 640px) {.banda-lado {flex-direction:row; align-items:center; flex-wrap:wrap;}}

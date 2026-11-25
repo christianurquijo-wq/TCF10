@@ -83,7 +83,7 @@ fig.update_layout(uniformtext=dict(minsize=11, mode="hide"), separators=",.",
 for coh, tot in totales.items():
     fig.add_annotation(x=coh, y=tot, text=f"<b>{ui.num(tot)}</b>", showarrow=False, yshift=12,
                        font=dict(color=ui.NOCHE, size=13))
-st.plotly_chart(ui.dark_layout(fig, 400), width="stretch")
+ui.grafica_atenea(fig, 400)
 
 # Tabla: cada formalizado está en un solo estado, así que las columnas de estado suman «Formalizados».
 estados = [e for e in ["En formación", "Por iniciar", "Culminó", "Desistió"]

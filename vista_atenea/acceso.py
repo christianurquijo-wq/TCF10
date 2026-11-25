@@ -18,14 +18,11 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import time
 
 import streamlit as st
 
 from tcf10 import data, ui
-
-MAX_INTENTOS = 5
-BLOQUEO_SEG = 60
+from vista_atenea import legal, seguridad
 
 
 def hash_contrasena(contrasena: str, sal: bytes, iteraciones: int = 200_000) -> str:
@@ -98,6 +95,9 @@ def pantalla_ingreso() -> None:
     """Dibuja la pantalla de ingreso y detiene la página."""
     if _hay_oauth() and st.user.is_logged_in:
         correo = str(st.user.get("email", "")).lower()
+        if not st.session_state.get("at_rechazo_reg"):
+            st.session_state["at_rechazo_reg"] = True
+            seguridad.registrar("ingreso_rechazado", correo, "google", "cuenta no autorizada")
         _pantalla(error=f"La cuenta {correo} no está autorizada. Solicita acceso al equipo de Kuepa.", google_salir=True)
     _pantalla()
 
@@ -108,14 +108,54 @@ def aviso_modo(s: dict) -> None:
                    "compartir el enlace.", icon=":material/lock_open:")
 
 
-def cerrar_sesion(s: dict) -> None:
-    st.session_state.pop("vista", None)
-    if s.get("via") == "google":
+def identificar(s: dict | None) -> None:
+    """Deja en la sesión el usuario y la vía para el registro de accesos y la marca de agua de las descargas."""
+    if not s:
+        return
+    st.session_state["seg_usuario"] = s.get("usuario") or s.get("nombre", "")
+    st.session_state["seg_via"] = s.get("via", "")
+
+
+def cerrar_sesion(s: dict, motivo: str = "salida") -> None:
+    if s and s.get("via") in ("usuario", "google"):
+        seguridad.registrar(motivo, st.session_state.get("seg_usuario", ""), s.get("via", ""), esperar=True)
+    for k in ("vista", "at_usuario", "at_acepto", "seg_ultima", "at_looker_ok"):
+        st.session_state.pop(k, None)
+    if motivo == "cierre_inactividad":
+        st.session_state["at_aviso_inactividad"] = True
+    if s and s.get("via") == "google":
         st.logout()
-    st.session_state.pop("at_usuario", None)
 
 
-def _pantalla(error: str = "", google_salir: bool = False) -> None:
+def exigir_aceptacion(s: dict) -> None:
+    """Tras ingresar con Google: aceptar los términos vigentes (una vez por versión; queda en el registro)."""
+    if s.get("via") != "google" or st.session_state.get("at_acepto") == legal.VERSION_TERMINOS:
+        return
+    correo = s.get("nombre", "")
+    if seguridad.ya_acepto(correo, legal.VERSION_TERMINOS):
+        st.session_state["at_acepto"] = legal.VERSION_TERMINOS
+        seguridad.registrar("ingreso", correo, "google")
+        return
+    _css()
+    with st.container(key="login"):
+        with st.container(key="login_form"):
+            st.markdown("<div class='login-h'>Antes de continuar</div>", unsafe_allow_html=True)
+            st.markdown(legal.AVISO_CORTO)
+            if st.button("Leer términos de uso y aviso de privacidad", icon=":material/gavel:", type="tertiary"):
+                legal.dialogo()
+            acepto = st.checkbox("He leído y acepto los Términos de uso y el Aviso de privacidad", key="at_g_acepto")
+            c1, c2 = st.columns(2)
+            if c1.button("Continuar", type="primary", width="stretch", disabled=not acepto):
+                st.session_state["at_acepto"] = legal.VERSION_TERMINOS
+                seguridad.registrar("acepta_terminos", correo, "google")
+                seguridad.registrar("ingreso", correo, "google")
+                st.rerun()
+            c2.button("Salir", on_click=st.logout, width="stretch")
+            st.caption(f"Sesión de Google: {correo}")
+    st.stop()
+
+
+def _css() -> None:
     st.markdown("""
 <style>
 .st-key-login {max-width: 920px; margin: 4vh auto 0 auto;}
@@ -127,8 +167,13 @@ def _pantalla(error: str = "", google_salir: bool = False) -> None:
                line-height:1.05; margin:6px 0 10px 0;}
 .login-texto {color:#B7D9E6; font-size:.95rem;}
 .login-h {font-family:'Barlow Semi Condensed', sans-serif; font-size:1.5rem; font-weight:700; color:#141439;}
-.login-o {text-align:center; color:#8A8FA8; font-size:.85rem; margin:10px 0;}
+.login-o {text-align:center; color:#5E6488; font-size:.85rem; margin:10px 0;}
+.login-aviso {color:#4A4F78; font-size:.85rem; margin:4px 0 8px 0;}
 </style>""", unsafe_allow_html=True)
+
+
+def _pantalla(error: str = "", google_salir: bool = False) -> None:
+    _css()
     with st.container(key="login"):
         izq, der = st.columns([1, 1.1], gap="large")
         with izq.container(key="login_marca"):
@@ -144,30 +189,51 @@ def _pantalla(error: str = "", google_salir: bool = False) -> None:
                 st.error(error, icon=":material/block:")
                 if google_salir:
                     st.button("Cerrar sesión de Google", on_click=st.logout)
-            bloqueado = st.session_state.get("at_bloqueo", 0) > time.time()
+            if st.session_state.pop("at_aviso_inactividad", False):
+                st.info(f"Tu sesión se cerró tras {seguridad.INACTIVIDAD_MIN} minutos sin actividad. Ingresa de nuevo.",
+                        icon=":material/timer_off:")
+            st.markdown(f"<div class='login-aviso'>{legal.AVISO_CORTO.replace('**', '')}</div>",
+                        unsafe_allow_html=True)
             with st.form("at_login", border=False):
-                usuario = st.text_input("Usuario", key="at_login_usuario")
-                clave = st.text_input("Contraseña", type="password", key="at_login_clave")
-                entrar = st.form_submit_button("Ingresar", type="primary", width="stretch", disabled=bloqueado)
-            if bloqueado:
-                st.warning(f"Demasiados intentos. Espera {int(st.session_state['at_bloqueo'] - time.time())} s.")
-            elif entrar:
-                u = _usuarios().get(usuario.strip().lower())
-                if u and verificar(clave, str(u.get("hash", ""))):
-                    st.session_state["at_usuario"] = {"nombre": u.get("nombre", usuario), "via": "usuario"}
-                    st.session_state.pop("at_intentos", None)
-                    st.rerun()
-                n = st.session_state.get("at_intentos", 0) + 1
-                st.session_state["at_intentos"] = n
-                if n >= MAX_INTENTOS:
-                    st.session_state["at_bloqueo"] = time.time() + BLOQUEO_SEG
-                    st.session_state["at_intentos"] = 0
-                st.error("Usuario o contraseña incorrectos.", icon=":material/error:")
+                usuario = st.text_input("Usuario", key="at_login_usuario", autocomplete="username")
+                clave = st.text_input("Contraseña", type="password", key="at_login_clave",
+                                      autocomplete="current-password")
+                acepto = st.checkbox("He leído y acepto los Términos de uso y el Aviso de privacidad",
+                                     key="at_login_acepto")
+                entrar = st.form_submit_button("Ingresar", type="primary", width="stretch")
+            if st.button("Leer términos de uso y aviso de privacidad", icon=":material/gavel:", type="tertiary"):
+                legal.dialogo()
+            if entrar:
+                nombre_u = usuario.strip().lower()[:80]
+                hasta = seguridad.bloqueado_hasta(nombre_u)
+                if hasta:
+                    st.error(f"Usuario bloqueado por {seguridad.MAX_INTENTOS} intentos fallidos. Intenta de nuevo "
+                             f"después de las {hasta:%H:%M} (hora Colombia).", icon=":material/lock_clock:")
+                elif not acepto:
+                    st.error("Para ingresar debes aceptar los Términos de uso y el Aviso de privacidad.",
+                             icon=":material/gavel:")
+                else:
+                    u = _usuarios().get(nombre_u)
+                    if u and verificar(clave, str(u.get("hash", ""))):
+                        st.session_state["at_usuario"] = {"nombre": u.get("nombre", usuario), "via": "usuario",
+                                                          "usuario": nombre_u}
+                        st.session_state["at_acepto"] = legal.VERSION_TERMINOS
+                        seguridad.limpiar_fallos(nombre_u)
+                        seguridad.registrar("acepta_terminos", nombre_u, "usuario")
+                        seguridad.registrar("ingreso", nombre_u, "usuario")
+                        st.rerun()
+                    seguridad.anotar_fallo(nombre_u)
+                    if seguridad.bloqueado_hasta(nombre_u):
+                        st.error(f"Usuario bloqueado {seguridad.BLOQUEO_MIN} minutos por intentos fallidos.",
+                                 icon=":material/lock_clock:")
+                    else:
+                        st.error("Usuario o contraseña incorrectos.", icon=":material/error:")
             if _hay_oauth():
                 st.markdown("<div class='login-o'>o</div>", unsafe_allow_html=True)
                 auth = st.secrets["auth"]
                 proveedor = next((k for k in auth.keys() if hasattr(auth[k], "keys")), None)
                 st.button("Ingresar con Google", icon=":material/account_circle:", on_click=st.login,
                           args=(proveedor,) if proveedor else (), width="stretch")
-                st.caption("Con Google: cuentas @agenciaatenea.gov.co y @kuepa.com autorizadas.")
+                st.caption("Con Google: cuentas @agenciaatenea.gov.co y @kuepa.com autorizadas. Al ingresar se te "
+                           "pedirá aceptar los términos.")
     st.stop()

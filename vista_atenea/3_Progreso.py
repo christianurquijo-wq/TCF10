@@ -35,7 +35,7 @@ fig = go.Figure(go.Histogram(x=form["horas_validas"], xbins=dict(start=0, end=90
 fig.add_vline(x=C.HORAS_CULMINACION, line_dash="dash", line_color=ui.NARANJA,
               annotation_text=f"Meta {ui.num(C.HORAS_CULMINACION)} h")
 fig.update_layout(xaxis_title="Horas válidas", yaxis_title="Participantes", bargap=.05)
-st.plotly_chart(ui.dark_layout(fig, 320), width="stretch")
+ui.grafica_atenea(fig, 320)
 
 _, prog = comun.agregados_asistencia(df)
 izq, der = st.columns(2)
@@ -48,7 +48,7 @@ with izq:
                  color_discrete_map={"Sincrónicas": ui.NOCHE, "Asincrónicas": ui.CELESTE},
                  labels={"horas": "Horas promedio", "grupo": "", "tipo": ""})
     fig.update_layout(barmode="stack", legend=dict(orientation="h", y=1.08))
-    st.plotly_chart(ui.dark_layout(fig, max(320, 22 * form["grupo"].nunique())), width="stretch")
+    ui.grafica_atenea(fig, max(320, 22 * form["grupo"].nunique()))
 with der:
     st.subheader("Avance en los cursos")
     if prog.empty:
@@ -65,4 +65,4 @@ with der:
                      labels={"curso": "", "estado": ""})
         fig.update_layout(barmode="stack", barnorm="percent", xaxis=dict(title="% de inscripciones", ticksuffix=" %"),
                           legend=dict(orientation="h", y=1.08))
-        st.plotly_chart(ui.dark_layout(fig, 60 + 50 * cur["curso"].nunique()), width="stretch")
+        ui.grafica_atenea(fig, 60 + 50 * cur["curso"].nunique())

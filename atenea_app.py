@@ -13,7 +13,7 @@ Una sola app con dos vistas:
 import streamlit as st
 
 from tcf10 import ui
-from vista_atenea import acceso, comun, estilo
+from vista_atenea import acceso, comun, estilo, legal, seguridad
 
 st.set_page_config(page_title="Talento Capital F10", page_icon="assets/atenea_icono.png", layout="wide",
                    initial_sidebar_state="collapsed")
@@ -27,6 +27,10 @@ PAGINAS_ATENEA = [
     st.Page("vista_atenea/4_Participantes.py", title="Participantes", icon=":material/badge:", url_path="participantes"),
     st.Page("vista_atenea/5_Ficha.py", title="Ficha", icon=":material/person_search:", url_path="ficha"),
     st.Page("vista_atenea/6_Looker.py", title="Tablero Looker", icon=":material/insert_chart:", url_path="looker"),
+    st.Page("vista_atenea/7_Como_se_calcula.py", title="Cómo se calcula", icon=":material/menu_book:",
+            url_path="como-se-calcula"),
+    st.Page("vista_atenea/8_Privacidad.py", title="Privacidad y términos", icon=":material/policy:",
+            url_path="privacidad"),
 ]
 PAGINAS_INTERNAS = [
     st.Page("tablero/6_Grupos_criticos.py", title="Grupos y casos críticos", icon=":material/crisis_alert:",
@@ -47,6 +51,13 @@ PAGINAS_INTERNAS = [
 
 # Sin sesión: menú oculto y pantalla de ingreso (usuario/contraseña o Google)
 sesion = acceso.sesion_actual()
+if sesion:
+    acceso.identificar(sesion)
+    # Cierre por inactividad (se evalúa en la primera interacción después de 30 min sin actividad)
+    if sesion.get("via") in ("usuario", "google") and seguridad.expirada():
+        acceso.cerrar_sesion(sesion, motivo="cierre_inactividad")
+        st.rerun()
+    seguridad.tocar()
 interno_ok = acceso.es_interno(sesion)
 st.session_state["interno_ok"] = interno_ok
 st.session_state["interno_correo"] = (sesion or {}).get("nombre", "")
@@ -57,6 +68,8 @@ interna = st.session_state.get("vista") == "interna"
 nav = st.navigation(PAGINAS_INTERNAS if interna else PAGINAS_ATENEA, position="top" if sesion else "hidden")
 if not sesion:
     acceso.pantalla_ingreso()
+if sesion:
+    acceso.exigir_aceptacion(sesion)  # Google: aceptar términos vigentes antes de ver datos
 if st.session_state.pop("ir_inicio", False):  # al cambiar de vista se abre su página inicial
     st.switch_page(PAGINAS_INTERNAS[0] if interna else PAGINAS_ATENEA[0])
 acceso.aviso_modo(sesion)
@@ -103,3 +116,21 @@ else:
                               width="stretch")
 
 nav.run()
+
+# Pie en todas las páginas: fuentes y fecha de corte (transparencia) y enlaces legales
+try:
+    _df = comun.todos()
+    _sis = _df["actualizado_sis"].max() if "actualizado_sis" in _df else None
+    import pandas as _pd  # noqa: E402
+    _sis_txt = "" if _sis is None or _pd.isna(_pd.to_datetime(_sis, errors="coerce")) else \
+        f" · SIS actualizado: {_pd.to_datetime(_sis):%d/%m/%Y %H:%M}"
+    st.markdown(
+        f"<div class='pie-legal'>Corte: {comun.hoy():%d/%m/%Y}{_sis_txt} · Fuentes: base de formalización, asignación "
+        f"docente y plataforma académica (SIS) de Kuepa EduTech · Información confidencial: uso exclusivo para el "
+        f"seguimiento del contrato {legal.CONTRATO}.</div>", unsafe_allow_html=True)
+    if not interna:
+        p1, p2, _ = st.columns([1, 1, 3])
+        p1.page_link(PAGINAS_ATENEA[-2], label="Cómo se calcula", icon=":material/menu_book:")
+        p2.page_link(PAGINAS_ATENEA[-1], label="Privacidad y términos", icon=":material/policy:")
+except Exception:  # noqa: BLE001 -- el pie nunca debe tumbar la página
+    pass

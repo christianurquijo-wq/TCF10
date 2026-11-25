@@ -10,7 +10,7 @@ from tcf10 import ui
 from vista_atenea import comun, estilo
 from vista_atenea import ficha_datos as FD
 
-COLOR_SESION = {"Asistió": ui.AZUL, "No asistió": ui.NARANJA, "Sin registro": "#9AA3B5", "Programada": ui.CELESTE}
+COLOR_SESION = {"Asistió": ui.AZUL, "No asistió": ui.NARANJA, "Sin registro": "#7A8199", "Programada": ui.CELESTE}
 
 estilo.pagina("Ficha del participante", "Estado actual, trayectoria de horas, asistencia y avance en los cursos")
 todos = comun.todos()
@@ -97,12 +97,12 @@ else:
     fig.add_scatter(x=d.index, y=d["asinc"], name="Asincrónicas", mode="lines", line=dict(color=ui.NARANJA, width=2))
     if pd.notna(fin):
         fig.add_scatter(x=[inicio, fin], y=[0, C.HORAS_TOTALES], name="Ritmo esperado", mode="lines",
-                        line=dict(color="#9AA3B5", width=2, dash="dot"))
+                        line=dict(color="#7A8199", width=2, dash="dot"))
     fig.add_hline(y=C.HORAS_CULMINACION, line_dash="dash", line_color=ui.NARANJA,
                   annotation_text=f"Culminación: {ui.num(C.HORAS_CULMINACION)} h", annotation_position="top left")
     fig.update_layout(yaxis_title="Horas acumuladas", hovermode="x unified", legend=dict(orientation="h", y=1.12),
                       xaxis=dict(range=[inicio, fin if pd.notna(fin) else hoy]), separators=",.")
-    st.plotly_chart(ui.dark_layout(fig, 360), width="stretch")
+    ui.grafica_atenea(fig, 360)
     st.caption("Sincrónicas: sesiones asistidas con el docente. Asincrónicas: horas acreditadas en la plataforma, "
                "distribuidas según los días de ingreso. La línea punteada es el avance esperado para completar 90 h al cierre.")
 
@@ -121,12 +121,12 @@ with izq:
             x = orden[orden["estado"] == e]
             if len(x):
                 fig.add_scatter(x=x["etiqueta"], y=[""] * len(x), mode="markers", name=e,
-                                marker=dict(size=18, color=COLOR_SESION[e], line=dict(width=1, color="#fff")),
+                                marker=dict(size=18, color=COLOR_SESION[e], line=dict(width=1, color=ui.NOCHE)),
                                 customdata=x["sesion"], hovertemplate="Sesión %{customdata} · %{x}<extra>" + e + "</extra>")
         fig.update_layout(xaxis=dict(type="category", categoryorder="array",
                                      categoryarray=orden["etiqueta"].drop_duplicates().tolist()),
                           yaxis=dict(visible=False), legend=dict(orientation="h", y=1.25), margin=dict(t=30))
-        st.plotly_chart(ui.dark_layout(fig, 170), width="stretch")
+        ui.grafica_atenea(fig, 170)
         racha, maxr = 0, 0
         for e in pasadas.sort_values("fecha")["estado"]:
             racha = racha + 1 if e == "No asistió" else 0
@@ -154,7 +154,7 @@ with der:
                                      zip(cur["avance"], cur["completadas"], cur["activas"])],
                                textposition="auto"))
         fig.update_layout(xaxis=dict(range=[0, 1], tickformat=".0%"), yaxis=dict(autorange="reversed", title=None))
-        st.plotly_chart(ui.dark_layout(fig, 60 + 48 * len(cur)), width="stretch")
+        ui.grafica_atenea(fig, 60 + 48 * len(cur))
     if det["ultima_leccion"]:
         nombre, fecha, curso = det["ultima_leccion"]
         st.caption(f"Última lección terminada: **{nombre}**" + (f" ({ui.curso_corto(curso)})" if curso else "")
@@ -178,13 +178,13 @@ with a:
     fig = go.Figure(go.Bar(x=list(serie), y=[v[0] for v in serie.values()], marker_color=colores,
                            text=[ui.pct(v[0]) for v in serie.values()], textposition="outside"))
     fig.update_layout(title="Asistencia", yaxis=dict(tickformat=".0%", range=[0, 1.15]))
-    st.plotly_chart(ui.dark_layout(fig, 300), width="stretch")
+    ui.grafica_atenea(fig, 300)
 with b:
     fig = go.Figure()
     for (nombre, v), color in zip(serie.items(), colores):
         fig.add_bar(name=nombre, x=["Sincrónicas", "Asincrónicas", "Válidas"], y=list(v[1:]), marker_color=color,
                     text=[ui.num(x, 1) for x in v[1:]], textposition="outside")
     fig.update_layout(title="Horas", barmode="group", legend=dict(orientation="h", y=-0.18, x=0))
-    st.plotly_chart(ui.dark_layout(fig, 300), width="stretch")
+    ui.grafica_atenea(fig, 300)
 st.caption(f"Promedios de las personas en formación o que culminaron: {ui.num(len(grupo))} en el grupo y "
            f"{ui.num(len(cohorte))} en la cohorte.")
