@@ -676,7 +676,7 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
     elif cfg.get("sheet_id"):
         # Base real: «DB Formalización TCF10» cruzada por documento con el SIS; grupo y fechas salen del SIS.
         from tcf10 import base_atenea
-        benef, cohortes = base_atenea.calendario(_base_formalizacion(base_atenea.VERSION_BASE), sis_sheet.base(_sis_sheet(_esquema_sis())))
+        benef, cohortes = base_atenea.calendario(_base_formalizacion(getattr(base_atenea, "VERSION_BASE", "")), sis_sheet.base(_sis_sheet(_esquema_sis())))
         franjas = _sis_sheet(_esquema_sis()).get("franjas")
         if franjas is not None and len(franjas):
             mapa = franjas.set_index("grupo")["franja"]

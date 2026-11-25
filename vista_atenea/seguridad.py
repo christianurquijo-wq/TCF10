@@ -274,8 +274,7 @@ def bloque_vistas_crudas() -> None:
             st.rerun()
         return
     datos, filas, sello = zip_ok
-    resumen = " · ".join(f"{v.replace('VTD10_student_', '')}: {n:,}".replace(",", ".") for v, n in filas.items())
-    st.caption(f"Listo ({len(datos) / 1e6:.1f} MB) · filas por vista: {resumen}")
+    st.caption(f"Listo · {len(datos) / 1e6:.1f} MB")
 
     def _descargado():
         registrar("descarga", usuario_actual(), st.session_state.get("seg_via", ""),

@@ -123,7 +123,7 @@ def seccion_caracterizacion(df: pd.DataFrame) -> None:
     vacias = [c for c in dims if form[c].astype(str).eq(C.SIN_INFO).all()]
     if not dims or len(vacias) == len(dims):
         from tcf10 import base_atenea
-        diag = base_atenea.DIAGNOSTICO_CARACT
+        diag = getattr(base_atenea, "DIAGNOSTICO_CARACT", {})  # módulo viejo en memoria: sin diagnóstico
         detalle = (" · ".join(f"{C.CARACTERIZACION[k]}: {v or 'no encontrada'}" for k, v in diag.items())
                    if diag else "la base todavía no se ha releído con esta versión")
         st.warning("La base cargada no trae datos de caracterización. Pulsa **Actualizar** en la banda para releer "

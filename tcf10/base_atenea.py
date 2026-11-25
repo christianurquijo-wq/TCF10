@@ -85,7 +85,9 @@ def _iniciales(*partes) -> str:
     return "".join(p[0].upper() + "." for p in palabras[:4])
 
 
+VERSION_BASE = "2026-11-26 caracterizacion"  # súbela al cambiar COLUMNAS (renueva el caché de la base)
 SIN_INFO = "Sin información"
+DIAGNOSTICO_CARACT: dict[str, str | None] = {}
 
 
 def _texto_caract(s: pd.Series) -> pd.Series:
@@ -119,6 +121,10 @@ def limpiar(crudo: pd.DataFrame, huella_a_id: dict[str, int]) -> pd.DataFrame:
         raise ValueError("A la base de Formalización le faltan columnas: " + ", ".join(faltan))
     col = {k: (crudo[v] if v is not None else pd.Series([""] * len(crudo), index=crudo.index)).astype("string")
            .fillna("").str.strip() for k, v in origen.items()}
+    # Diagnóstico de la caracterización: qué encabezado de la base se usó para cada campo (None = no se encontró)
+    DIAGNOSTICO_CARACT.clear()
+    DIAGNOSTICO_CARACT.update({k: origen[k] for k in ("sexo", "estrato", "nivel_educativo", "discapacidad",
+                                                     "tipo_discapacidad")})
 
     doc = huella(col["documento"])
     validas = doc.notna()
