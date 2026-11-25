@@ -498,7 +498,9 @@ def _como_texto(df: pd.DataFrame) -> pd.DataFrame:
 
 # columnas extra que se piden si la vista las tiene (documento para cruzar con Formalización, hora de inicio)
 EXTRAS_BQ = {"asis_det": ["student_doc", "session_start_date"], "asis_res": ["student_doc"],
-             "prog_cur": ["student_doc"], "prog_det": ["student_doc"]}
+             "prog_cur": ["student_doc"],
+             # nov-2026: detalle de cada recurso (ficha y horas a una fecha de corte)
+             "prog_det": ["student_doc", "component_name", "component_category", "is_completed", "pedagogical_time"]}
 
 SQL_POR_ESTUDIANTE = """
 SELECT
@@ -552,8 +554,9 @@ def _sis_bigquery() -> dict[str, pd.DataFrame]:
         cols = [c for c in sis_sheet.COLUMNAS[clave] + EXTRAS_BQ.get(clave, []) if c in disponibles[vista]]
         idc = "user_incremental" if clave == "basica" else "incremental"
         filtro = f"SAFE_CAST({idc} AS INT64) NOT IN ({excl})"
-        if clave == "prog_det":
-            filtro += " AND completed_date IS NOT NULL"  # solo lecciones terminadas: lo único que se usa
+        if clave == "prog_det":  # solo lo terminado: con fecha de completado o marcado como completado
+            filtro += (" AND (completed_date IS NOT NULL OR LOWER(CAST(is_completed AS STRING)) IN ('true', '1'))"
+                       if "is_completed" in disponibles[vista] else " AND completed_date IS NOT NULL")
         consultas[clave] = (f"SELECT {', '.join(f'`{c}`' for c in dict.fromkeys(cols))} FROM `{ds}.{vista}` "
                             f"WHERE {filtro}", vista)
     if "VTD10_student_progress_detail" in disponibles:
@@ -661,8 +664,9 @@ def _con_caracterizacion(benef: pd.DataFrame, demo: bool = False) -> pd.DataFram
     return b
 
 
-def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
-    """(beneficiarios, avance, cohortes, es_demo)."""
+def cargar(corte: pd.Timestamp | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
+    """(beneficiarios, avance, cohortes, es_demo). Con `corte` (fecha pasada) las horas, la asistencia y los retiros
+    se reconstruyen hasta ese día; sin él, se usa lo más reciente del SIS."""
     m = modo()
     if m == "demo":
         benef = limpiar_beneficiarios(pd.read_csv(DEMO / "beneficiarios.csv", dtype=str))
@@ -689,8 +693,12 @@ def cargar() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, bool]:
         cohortes = limpiar_cohortes(_leer_sheet(cfg.get("pestana_cohortes", "COHORTES")))
     ids = tuple(int(x) for x in benef["id_sis"].dropna().unique() if int(x) > 0)  # negativos = sin usuario SIS
     avance = limpiar_avance(sis_sheet.avance(_sis_sheet(_esquema_sis()), ids, _horas_por_sesion(),
-                                             float(cfg.get("divisor_time_view", 3600))))
+                                             float(cfg.get("divisor_time_view", 3600)), corte=corte))
     benef = _completar_grupo(benef, avance)
+    if corte is not None and "fecha_desistimiento" in benef:
+        # Quien se retiró después de la fecha de corte todavía estaba en formación ese día.
+        despues = benef["estado"].eq("Retirado") & (benef["fecha_desistimiento"] > pd.Timestamp(corte))
+        benef.loc[despues, "estado"] = "Enrolado"
     return _con_caracterizacion(benef), avance, cohortes, False
 
 
@@ -729,7 +737,7 @@ def detalle_persona(id_sis: int) -> tuple[pd.DataFrame, pd.DataFrame]:
             .rename(columns={"session_date": "Fecha", "session_number": "Sesión", "group_name": "Grupo"}))
     c = t["prog_cur"][t["prog_cur"]["id_sis"] == int(id_sis)].copy()
     cur = pd.DataFrame({"Curso": c["course_name"], "Avance": c["course_completed_status"] / 100,
-                        "Lecciones": c["lessons_completed"].fillna(0).astype(int).astype(str) + " de "
+                        "Recursos": c["lessons_completed"].fillna(0).astype(int).astype(str) + " de "
                                      + c["lessons_active"].fillna(0).astype(int).astype(str),
                         "Estado": c["progress_status"].map({"completado": "Completado", "en_progreso": "En progreso",
                                                             "sin_iniciar": "Sin iniciar"})})
@@ -737,12 +745,16 @@ def detalle_persona(id_sis: int) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 # ------------------------------------------------------------------ agregados del SIS (página de asistencia)
-def agregados(ids: tuple[int, ...]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """(asistencia por grupo × sesión, progreso por grupo × curso). En demo se generan sintéticos."""
+def agregados(ids: tuple[int, ...], corte: pd.Timestamp | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(asistencia por grupo × sesión, progreso por grupo × curso). En demo se generan sintéticos. Con `corte`, solo
+    las sesiones hasta ese día (el progreso por curso es el último que reporta el SIS)."""
     if modo_demo():
-        return _agregados_demo(ids)
+        asis, prog = _agregados_demo(ids)
+        if corte is not None:
+            asis = asis[pd.to_datetime(asis["fecha"]).dt.normalize() <= pd.Timestamp(corte)]
+        return asis, prog
     from tcf10 import sis_sheet
-    asis, prog = sis_sheet.agregados(_sis_sheet(_esquema_sis()), ids)
+    asis, prog = sis_sheet.agregados(_sis_sheet(_esquema_sis()), ids, corte)
     asis["fecha"] = pd.to_datetime(asis["fecha"], errors="coerce")
     return asis, prog
 

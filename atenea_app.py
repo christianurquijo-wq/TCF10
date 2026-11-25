@@ -95,15 +95,16 @@ if interna:
     with st.container(key="banda"):
         st.markdown(estilo.banda_html(f"{comun.hoy():%d/%m/%Y}", interna=True, enlace="?vista=atenea"),
                     unsafe_allow_html=True)
-        pie = st.columns([3, 1.2, 1, 1])
-        pie[0].caption(f"Vista interna Kuepa · {correo}" if correo else "Vista interna Kuepa")
-        pie[1].button("Vista Atenea", icon=":material/visibility:", on_click=cambiar_vista, args=("atenea",),
+        pie = st.columns([1.3, 1.7, 1.2, 1, 1], vertical_alignment="bottom")
+        ui.selector_corte(pie[0])
+        pie[1].caption(f"Vista interna Kuepa · {correo}" if correo else "Vista interna Kuepa")
+        pie[2].button("Vista Atenea", icon=":material/visibility:", on_click=cambiar_vista, args=("atenea",),
                       width="stretch", type="primary")
-        if pie[2].button("Actualizar", icon=":material/refresh:", width="stretch"):
+        if pie[3].button("Actualizar", icon=":material/refresh:", width="stretch"):
             ui.refrescar()
             st.rerun()
         if correo:
-            pie[3].button("Salir", icon=":material/logout:", on_click=acceso.cerrar_sesion, args=(sesion,),
+            pie[4].button("Salir", icon=":material/logout:", on_click=acceso.cerrar_sesion, args=(sesion,),
                           width="stretch")
 else:
     # Banda institucional con los filtros globales (aplican a todas las páginas de la vista Atenea)

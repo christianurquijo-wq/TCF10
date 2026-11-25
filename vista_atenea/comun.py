@@ -17,12 +17,12 @@ COLOR_ESTADO = ui.COLOR_RIESGO
 
 
 def hoy() -> pd.Timestamp:
-    return ui.HOY_DEMO if data.modo_demo() else pd.Timestamp(datetime.now(ui.TZ).date())
+    return ui.fecha_corte()  # fecha de corte elegida en la banda (por defecto, hoy)
 
 
 @st.cache_data(ttl=data.TTL, show_spinner="Cargando datos…")
-def _todos(dia: pd.Timestamp, version: str) -> pd.DataFrame:
-    df, _ = ui._preparado(dia, version)
+def _todos(dia: pd.Timestamp, version: str, es_corte: bool = False) -> pd.DataFrame:
+    df, _ = ui._preparado(dia, version, es_corte)
     df = df.copy()
     df["estado_atenea"] = df.apply(estado, axis=1)
     return df
@@ -33,7 +33,8 @@ def todos() -> pd.DataFrame:
     cada página la piden en cada clic, y ya no se recalcula."""
     from tcf10 import metrics
     try:
-        return _todos(hoy(), getattr(metrics, "VERSION", ""))
+        dia = hoy()
+        return _todos(dia, getattr(metrics, "VERSION", ""), dia < ui.hoy_real())
     except data.ErrorConfiguracion as e:
         st.error(str(e), icon=":material/error:")
         st.stop()
@@ -46,7 +47,8 @@ def estado(f: pd.Series) -> str:
 
 def filtros_banda(df: pd.DataFrame) -> None:
     """Filtros globales en la banda superior (valen para todas las páginas)."""
-    cols = st.columns(len(FILTROS))
+    cols = st.columns(len(FILTROS) + 1)
+    ui.selector_corte(cols[-1])
     base = df
     for c, (col, etiqueta) in zip(cols, FILTROS):
         opciones = sorted(base[col].dropna().astype(str).unique(),
@@ -82,12 +84,13 @@ def asistencia_personas(df: pd.DataFrame) -> pd.Series:
 
 def agregados_asistencia(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     ids = tuple(sorted(int(x) for x in df["id_sis"].dropna().unique() if int(x) > 0))
-    asis, prog = data.agregados(ids)
+    corte = hoy()
+    asis, prog = data.agregados(ids, corte if corte < ui.hoy_real() else None)
     grupos = set(df["grupo"])
     asis = asis[asis["grupo"].isin(grupos)].copy()
     prog = prog[prog["grupo"].isin(grupos)].copy()
     # lo de las últimas 24 h todavía puede estar por registrar por el docente
-    limite = (pd.Timestamp(datetime.now(ui.TZ).replace(tzinfo=None))
+    limite = (min(pd.Timestamp(datetime.now(ui.TZ).replace(tzinfo=None)), corte + pd.Timedelta(days=1))
               - pd.Timedelta(hours=C.REGISTRO_GRACIA_HORAS)).normalize()
     asis.loc[pd.to_datetime(asis["fecha"]) >= limite, "sin_registro"] = 0
     return asis, prog

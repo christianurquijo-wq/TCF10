@@ -75,7 +75,7 @@ with k[1]:
                f"{ui.pct(min(1, f['horas_validas'] / C.HORAS_CULMINACION))} de las {ui.num(C.HORAS_CULMINACION)} h "
                "para culminar", "noche")
 with k[2]:
-    estilo.kpi("Con docente + plataforma", f"{ui.num(f['horas_sinc_val'], 1)} + {ui.num(f['horas_asinc_val'], 1)}",
+    estilo.kpi("Sincrónico + asincrónico", f"{ui.num(f['horas_sinc_val'], 1)} + {ui.num(f['horas_asinc_val'], 1)}",
                f"topes: {ui.num(C.HORAS_SINCRONICAS, 1)} h sincrónico (asistencia) y {ui.num(C.HORAS_ASINCRONICAS, 1)} h asincrónico (contenidos)",
                "profundo")
 with k[3]:
@@ -157,19 +157,37 @@ with der:
     estilo.seccion("Avance por curso")
     cur = det["cursos"]
     if cur.empty:
-        st.info("Sin avance registrado en los cursos.")
+        st.info("Sin recursos completados hasta la fecha de corte." if det.get("hay_recursos", True) else
+                "La fuente del SIS no trae el detalle de recursos (pedagogical_time por recurso).")
     else:
-        cur = cur.assign(nombre=cur["curso"].map(ui.curso_corto))
-        fig = go.Figure(go.Bar(x=cur["avance"], y=cur["nombre"], orientation="h", marker_color=ui.AZUL,
-                               text=[f"{a:.0%} · {c} de {t} lecciones" for a, c, t in
-                                     zip(cur["avance"], cur["completadas"], cur["activas"])],
-                               textposition="auto"))
-        fig.update_layout(xaxis=dict(range=[0, 1], tickformat=".0%"), yaxis=dict(autorange="reversed", title=None))
+        cur = cur.assign(nombre=cur["curso"].fillna("Sin curso").map(ui.curso_corto))
+        fig = go.Figure(go.Bar(x=cur["recursos"], y=cur["nombre"], orientation="h", marker_color=ui.AZUL,
+                               text=[f"{int(n)} recursos · {ui.num(h, 1)} h" for n, h in zip(cur["recursos"], cur["horas"])],
+                               textposition="auto",
+                               hovertemplate="%{y}: %{x} recursos completados<extra></extra>"))
+        fig.update_layout(xaxis=dict(title="Recursos completados", rangemode="tozero"),
+                          yaxis=dict(autorange="reversed", title=None))
         ui.grafica_atenea(fig, 60 + 48 * len(cur))
     if det["ultima_leccion"]:
         nombre, fecha, curso = det["ultima_leccion"]
-        st.caption(f"Última lección terminada: **{nombre}**" + (f" ({ui.curso_corto(curso)})" if curso else "")
+        st.caption(f"Último recurso completado: **{nombre}**" + (f" ({ui.curso_corto(curso)})" if curso else "")
                    + f" · {ui.fecha_corta(fecha)}")
+
+# ------------------------------------------------------------------ recursos completados
+rec = det.get("recursos")
+if rec is not None and len(rec):
+    estilo.seccion("Recursos completados")
+    total_h = float(rec["horas"].sum())
+    tope = C.HORAS_ASINCRONICAS
+    st.caption(f"{ui.num(len(rec))} recursos · {ui.num(total_h, 1)} h de {C.ETQ_ASINC.lower()}"
+               + (f" (cuentan hasta {ui.num(tope, 1)} h para el avance)" if total_h > tope + 1e-9 else "")
+               + ". Es el mismo detalle de la gráfica y de las horas asincrónicas del participante.")
+    tabla_rec = rec.assign(curso=rec["curso"].fillna("Sin curso").map(ui.curso_corto))[
+        ["fecha", "curso", "leccion", "recurso", "horas"]].sort_values(["fecha", "curso"], na_position="last")
+    st.dataframe(tabla_rec, hide_index=True, width="stretch", height=min(420, 38 + 35 * len(tabla_rec)),
+                 column_config={"fecha": st.column_config.DateColumn("Completado", format="DD/MM/YYYY"),
+                                "curso": "Curso", "leccion": "Tema", "recurso": "Recurso",
+                                "horas": st.column_config.NumberColumn("Duración (h)", format="%.2f")})
 
 # ------------------------------------------------------------------ comparación
 estilo.seccion("Comparación con su grupo y su cohorte")

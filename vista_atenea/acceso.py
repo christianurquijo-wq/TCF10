@@ -22,7 +22,7 @@ import hmac
 import streamlit as st
 
 from tcf10 import data, ui
-from vista_atenea import legal, seguridad
+from vista_atenea import legal, seguridad, usuarios
 
 
 def hash_contrasena(contrasena: str, sal: bytes, iteraciones: int = 200_000) -> str:
@@ -184,7 +184,13 @@ def _pantalla(error: str = "", google_salir: bool = False) -> None:
                         "ATENEA-497-2026.</div>"
                         f"<div style='margin-top:26px'>{ui.chip_kuepa()}</div>", unsafe_allow_html=True)
         with der.container(key="login_form"):
+            if st.session_state.get("at_modo_login") == "clave" and usuarios.disponible():
+                usuarios.pantalla_clave()
+                st.stop()
             st.markdown("<div class='login-h'>Ingresar</div>", unsafe_allow_html=True)
+            if st.session_state.pop("at_aviso_clave", False):
+                st.success("Contraseña guardada. Ya puedes ingresar con tu correo y tu nueva contraseña.",
+                           icon=":material/check_circle:")
             if error:
                 st.error(error, icon=":material/block:")
                 if google_salir:
@@ -195,14 +201,20 @@ def _pantalla(error: str = "", google_salir: bool = False) -> None:
             st.markdown(f"<div class='login-aviso'>{legal.AVISO_CORTO.replace('**', '')}</div>",
                         unsafe_allow_html=True)
             with st.form("at_login", border=False):
-                usuario = st.text_input("Usuario", key="at_login_usuario", autocomplete="username")
+                usuario = st.text_input("Usuario o correo", key="at_login_usuario", autocomplete="username")
                 clave = st.text_input("Contraseña", type="password", key="at_login_clave",
                                       autocomplete="current-password")
                 acepto = st.checkbox("He leído y acepto los Términos de uso y el Aviso de privacidad",
                                      key="at_login_acepto")
                 entrar = st.form_submit_button("Ingresar", type="primary", width="stretch")
-            if st.button("Leer términos de uso y aviso de privacidad", icon=":material/gavel:", type="tertiary"):
+            b1, b2 = st.columns(2)
+            if b1.button("Términos y privacidad", icon=":material/gavel:", type="tertiary"):
                 legal.dialogo()
+            if usuarios.disponible() and b2.button("Crear o recuperar contraseña", icon=":material/key:",
+                                                   type="tertiary"):
+                st.session_state["at_modo_login"] = "clave"
+                st.session_state["at_clave_paso"] = 1
+                st.rerun()
             if entrar:
                 nombre_u = usuario.strip().lower()[:80]
                 hasta = seguridad.bloqueado_hasta(nombre_u)
@@ -214,7 +226,12 @@ def _pantalla(error: str = "", google_salir: bool = False) -> None:
                              icon=":material/gavel:")
                 else:
                     u = _usuarios().get(nombre_u)
-                    if u and verificar(clave, str(u.get("hash", ""))):
+                    ok = bool(u and verificar(clave, str(u.get("hash", ""))))
+                    if not ok and "@" in nombre_u:  # usuarios con contraseña propia (pestaña USUARIOS STREAMLIT)
+                        propio = usuarios.verificar_ingreso(nombre_u, clave)
+                        if propio:
+                            u, ok = propio, True
+                    if ok:
                         st.session_state["at_usuario"] = {"nombre": u.get("nombre", usuario), "via": "usuario",
                                                           "usuario": nombre_u}
                         st.session_state["at_acepto"] = legal.VERSION_TERMINOS

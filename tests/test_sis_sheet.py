@@ -181,3 +181,35 @@ def test_franjas_corrige_desfase_de_bigquery():
     fr = S.franjas_por_grupo(g, ini).set_index("grupo")["franja"]
     assert fr["A"].startswith("Mañana") and fr["B"].startswith("Tarde")
     assert fr["C"].startswith("Noche") and fr["D"].startswith("Noche")
+
+
+def _con_recursos():
+    c = _crudas()
+    filas = []
+    for inc in (101, 102):
+        for k, (fecha, seg, cat, comp) in enumerate([("2026-10-02T10:00:00", 1800, "resource", True),
+                                                      ("2026-10-05T10:00:00", 3600, "resource", True),
+                                                      ("2026-10-06T10:00:00", 900, "quiz", True),
+                                                      ("", 600, "resource", True)]):
+            filas.append({"incremental": inc, "completed_date": fecha, "last_updated_statistics": "2026-11-13 05:00:00",
+                          "lesson_name": f"Tema {k}", "course_name": "Módulo 1", "component_name": f"Recurso {k}",
+                          "component_category": cat, "is_completed": comp, "pedagogical_time": seg})
+    c["prog_det"] = pd.DataFrame(filas)
+    return c
+
+
+def test_recursos_cuadran_con_horas_y_corte():
+    t = S.preparar(_con_recursos())
+    rec = S.recursos(t, [101])
+    assert list(rec["recurso"].fillna("")) == ["Recurso 0", "Recurso 1", "Recurso 3"]   # el quiz no cuenta
+    assert rec["horas"].sum() == pytest.approx((1800 + 3600 + 600) / 3600)
+    # al 3 de octubre solo el primer recurso (y el que no trae fecha)
+    al3 = S.recursos(t, [101], pd.Timestamp("2026-10-03"))
+    assert al3["horas"].sum() == pytest.approx((1800 + 600) / 3600)
+    av = S.avance(t, [101, 103], 4.0, 3600, corte=pd.Timestamp("2026-10-02")).set_index("id_sis")
+    assert av.loc[101, "horas_asinc"] == pytest.approx((1800 + 600) / 3600, abs=0.01)
+    assert av.loc[101, "sesiones_asistidas"] == 2      # sesiones del 1 y 2 de octubre
+    assert av.loc[101, "horas_sinc"] == 8.0
+    assert av.loc[101, "sesiones_a_la_fecha"] == 2
+    asis, _ = S.agregados(t, [101, 102, 103], pd.Timestamp("2026-10-01"))
+    assert set(asis["sesion"]) == {1}

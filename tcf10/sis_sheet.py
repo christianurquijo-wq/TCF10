@@ -31,7 +31,7 @@ COL_PEDAGOGICO = "pedagogical_time"
 PESTANA_EST = ("Consulta por estudiante", "VTD10_student_progress_by_student")
 COLUMNAS_EST = ["incremental", "horas_plataforma_acreditadas", "ultima_fecha_completada", "ultima_leccion",
                 "ultimo_curso", "last_updated_statistics"]
-VERSION = "2026-11-24 feedbacks"  # cambia la llave del caché cuando cambia la preparación
+VERSION = "2026-11-26 recursos y corte"  # cambia la llave del caché cuando cambia la preparación
 # columnas que se conservan de cada pestaña (las demás, incluidos datos personales, se descartan)
 COLUMNAS = {
     "asis_det": ["incremental", "group_name", "session_id", "session_number", "session_date", "attended",
@@ -47,6 +47,9 @@ COLUMNAS = {
                  "progress_status"],
 }
 OPCIONALES = {"login", "prog_det"}
+# Columnas que se conservan si la fuente las trae (BigQuery): detalle de cada recurso completado para la ficha y para
+# reconstruir las horas asincrónicas a una fecha de corte (nov-2026).
+COLUMNAS_OPCIONALES = {"prog_det": ["component_name", "component_category", "is_completed", COL_PEDAGOGICO]}
 SEGUNDOS_POR_HORA = 3600  # sin estas pestañas la app funciona (con menos precisión en «última actividad»)
 
 
@@ -137,7 +140,8 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         sin = [c for c in cols if c not in df.columns]
         if sin:
             raise FaltaEstructura(f"A la pestaña «{PESTANAS[clave]}» le faltan columnas: {', '.join(sin)}.")
-        t[clave] = df[cols].copy()
+        extra = [c for c in COLUMNAS_OPCIONALES.get(clave, []) if c in df.columns]
+        t[clave] = df[cols + extra].copy()
 
     b = t["basica"]
     b["iniciales"] = b.pop("user_full_name").map(iniciales)  # el nombre no sale de aquí
@@ -160,6 +164,10 @@ def preparar(crudas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     t["login"]["time_view"] = _num(t["login"]["time_view"]).fillna(0)
     for c in ("completed_date", "last_updated_statistics"):
         t["prog_det"][c] = _fecha(t["prog_det"][c])
+    if COL_PEDAGOGICO in t["prog_det"]:
+        t["prog_det"][COL_PEDAGOGICO] = _num(t["prog_det"][COL_PEDAGOGICO]).fillna(0)
+    if "is_completed" in t["prog_det"]:
+        t["prog_det"]["is_completed"] = _bool(t["prog_det"]["is_completed"])
     for c in ("group_start_date", "group_end_date"):
         t["prog_cur"][c] = _fecha(t["prog_cur"][c])
     for c in ("course_completed_status", "lessons_active", "lessons_completed", "course_time_view"):
@@ -249,6 +257,32 @@ def ultima_leccion(t: dict[str, pd.DataFrame], pid: int):
     return (texto(leccion) or "Lección", fecha, texto(curso))
 
 
+def hay_recursos(t: dict[str, pd.DataFrame]) -> bool:
+    d = t.get("prog_det")
+    return d is not None and {"component_category", "is_completed", COL_PEDAGOGICO} <= set(d.columns)
+
+
+def recursos(t: dict[str, pd.DataFrame], ids=None, corte: pd.Timestamp | None = None) -> pd.DataFrame:
+    """Recursos completados (component_category = "resource" e is_completed = TRUE), uno por fila: id_sis, curso,
+    leccion, recurso, fecha, horas. Es exactamente lo que suman las horas asincrónicas (pedagogical_time ÷ 3600).
+    Con `corte`, solo los completados hasta ese día (los que no traen fecha se cuentan siempre)."""
+    cols = ["id_sis", "curso", "leccion", "recurso", "fecha", "horas"]
+    if not hay_recursos(t):
+        return pd.DataFrame(columns=cols)
+    d = t["prog_det"]
+    ok = d["component_category"].astype(str).str.strip().str.lower().eq("resource") & d["is_completed"]
+    if ids is not None:
+        ok &= d["id_sis"].isin(set(int(i) for i in ids))
+    if corte is not None:
+        ok &= d["completed_date"].isna() | (d["completed_date"].dt.normalize() <= pd.Timestamp(corte).normalize())
+    x = d[ok]
+    nombre = x["component_name"] if "component_name" in x else x["lesson_name"]
+    out = pd.DataFrame({"id_sis": x["id_sis"], "curso": x["course_name"].astype("string"),
+                        "leccion": x["lesson_name"].astype("string"), "recurso": nombre.astype("string"),
+                        "fecha": x["completed_date"], "horas": x[COL_PEDAGOGICO] / SEGUNDOS_POR_HORA})
+    return out.sort_values(["fecha", "curso"], na_position="last").reset_index(drop=True)
+
+
 def horas_plataforma(t: dict[str, pd.DataFrame], ids, divisor_respaldo: float = SEGUNDOS_POR_HORA) -> pd.Series:
     """Horas_Plataforma_Acreditadas por ID SIS: suma de pedagogical_time (segundos) de VTD10_student_progress_detail
     en recursos completados (component_category = "resource" e is_completed = TRUE) / 3600.
@@ -333,23 +367,52 @@ def actualizado(t: dict[str, pd.DataFrame]) -> pd.Timestamp:
     return min(marcas) if marcas else pd.NaT
 
 
-def avance(t: dict[str, pd.DataFrame], ids, horas_sesion: float, divisor_tiempo: float) -> pd.DataFrame:
+def _asistencia_al_corte(t: dict[str, pd.DataFrame], ids: set, corte: pd.Timestamp) -> pd.DataFrame:
+    """Lo mismo que trae VTD10_student_attendance_per_group_summary, pero contado sesión por sesión hasta `corte`."""
+    d = t["asis_det"][t["asis_det"]["id_sis"].isin(ids)].copy()
+    fecha = d["session_date"].dt.normalize()
+    hasta = fecha <= pd.Timestamp(corte).normalize()
+    d["_asistio"] = (d["attended"] > 0) & hasta
+    d["_falto"] = (d["not_attended"] > 0) & hasta
+    d["_hasta"] = hasta
+    d["_fecha_asis"] = d["session_date"].where(d["_asistio"])
+    return d.groupby("id_sis").agg(sesiones_asistidas=("_asistio", "sum"), sesiones_inasistidas=("_falto", "sum"),
+                                   sesiones_a_la_fecha=("_hasta", "sum"), sesiones_totales=("session_id", "nunique"),
+                                   ultima_asistencia=("_fecha_asis", "max"))
+
+
+def avance(t: dict[str, pd.DataFrame], ids, horas_sesion: float, divisor_tiempo: float,
+           corte: pd.Timestamp | None = None) -> pd.DataFrame:
+    """Horas y sesiones por persona. Con `corte` (fecha pasada) se reconstruye todo hasta ese día: asistencia
+    sesión por sesión, horas asincrónicas sumando los recursos completados hasta esa fecha y última actividad."""
     ids = set(int(i) for i in ids)
     ar = t["asis_res"][t["asis_res"]["id_sis"].isin(ids)]
-    asis = ar.groupby("id_sis").agg(sesiones_asistidas=("attended_sessions", "sum"),
-                                    sesiones_inasistidas=("not_attended_sessions", "sum"),
-                                    sesiones_a_la_fecha=("total_sessions_to_date", "sum"),
-                                    sesiones_totales=("total_sessions", "sum"),
-                                    ultima_asistencia=("last_attendance_date", "max"))
+    if corte is None:
+        asis = ar.groupby("id_sis").agg(sesiones_asistidas=("attended_sessions", "sum"),
+                                        sesiones_inasistidas=("not_attended_sessions", "sum"),
+                                        sesiones_a_la_fecha=("total_sessions_to_date", "sum"),
+                                        sesiones_totales=("total_sessions", "sum"),
+                                        ultima_asistencia=("last_attendance_date", "max"))
+    else:
+        asis = _asistencia_al_corte(t, ids, corte)
     grupo = (ar.sort_values("total_sessions", ascending=False).dropna(subset=["group_name"])
                .drop_duplicates("id_sis").set_index("id_sis")["group_name"].rename("grupo_sis"))
-    asinc = horas_plataforma(t, ids, divisor_tiempo)  # Horas_Plataforma_Acreditadas
-    ult_comp = t["prog_det"][t["prog_det"]["id_sis"].isin(ids)].groupby("id_sis")["completed_date"].max()
+    if corte is not None and hay_recursos(t):
+        asinc = recursos(t, ids, corte).groupby("id_sis")["horas"].sum().rename("horas_asinc")
+    else:
+        asinc = horas_plataforma(t, ids, divisor_tiempo)  # Horas_Plataforma_Acreditadas
+    det = t["prog_det"][t["prog_det"]["id_sis"].isin(ids)]
+    lg = t["login"][t["login"]["id_sis"].isin(ids)]
+    if corte is not None:
+        lim = pd.Timestamp(corte).normalize() + pd.Timedelta(days=1)
+        det = det[det["completed_date"] < lim]
+        lg = lg[lg["log_date"] < lim]
+    ult_comp = det.groupby("id_sis")["completed_date"].max()
     est = t.get("prog_est")
-    if est is not None and len(est):
+    if corte is None and est is not None and len(est):
         ult_est = est[est["id_sis"].isin(ids)].groupby("id_sis")["ultima_fecha"].max()
         ult_comp = pd.concat([ult_comp, ult_est], axis=1).max(axis=1)
-    ult_login = t["login"][t["login"]["id_sis"].isin(ids)].groupby("id_sis")["log_date"].max()
+    ult_login = lg.groupby("id_sis")["log_date"].max()
 
     df = pd.concat([asis, grupo, asinc, ult_comp.rename("ultimo_completado"),
                     ult_login.rename("ultimo_ingreso")], axis=1)
@@ -401,10 +464,12 @@ def base(t: dict[str, pd.DataFrame]) -> pd.DataFrame:
              [["id_sis", "iniciales", "perfil", "nivel", "grupo", "fecha_inicio", "fecha_fin"]])
 
 
-def agregados(t: dict[str, pd.DataFrame], ids) -> tuple[pd.DataFrame, pd.DataFrame]:
+def agregados(t: dict[str, pd.DataFrame], ids, corte: pd.Timestamp | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     ids = set(int(i) for i in ids)
     d = t["asis_det"]
     d = d[d["is_past_session"] & d["id_sis"].isin(ids)]
+    if corte is not None:
+        d = d[d["session_date"].dt.normalize() <= pd.Timestamp(corte).normalize()]
     asis = (d.groupby(["group_name", "session_id"], as_index=False)
               .agg(sesion=("session_number", "first"), fecha=("session_date", "first"),
                    convocados=("id_sis", "nunique"), asistieron=("attended", "sum"),

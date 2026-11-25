@@ -85,7 +85,7 @@ def _iniciales(*partes) -> str:
     return "".join(p[0].upper() + "." for p in palabras[:4])
 
 
-VERSION_BASE = "2026-11-26 caracterizacion"  # súbela al cambiar COLUMNAS (renueva el caché de la base)
+VERSION_BASE = "2026-11-26 corte"  # súbela al cambiar COLUMNAS (renueva el caché de la base)
 SIN_INFO = "Sin información"
 DIAGNOSTICO_CARACT: dict[str, str | None] = {}
 
@@ -159,6 +159,8 @@ def limpiar(crudo: pd.DataFrame, huella_a_id: dict[str, int]) -> pd.DataFrame:
         "en_sis": ~sin_sis,
         "huella": doc,                                      # para buscar por cédula sin guardar la cédula
         "fuente": "formalizacion",
+        "fecha_desistimiento": pd.to_datetime(col["fecha_desistimiento"].replace("", None), dayfirst=True,
+                                              errors="coerce", format="mixed"),
         **caracterizacion(col),
     })[validas]
     df["certificado"] = pd.Series([None] * len(df), index=df.index, dtype=object)

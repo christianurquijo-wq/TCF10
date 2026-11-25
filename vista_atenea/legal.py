@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-VERSION_TERMINOS = "v3 · 2026-11-25 (borrador)"
+VERSION_TERMINOS = "v4 · 2026-11-26 (borrador)"
 BORRADOR = True  # False cuando jurídica apruebe los textos (quita el aviso de borrador)
 
 ATENEA = {
@@ -80,7 +80,9 @@ por persona, y los grupos de menos de 5 personas se muestran como «< 5». La p�
 los datos de contacto y el detalle de actividad registrados en la plataforma; cada descarga queda registrada.
 
 **Datos de quienes usan la herramienta.** Usuario o correo con el que ingresas, fecha y hora de ingreso y salida,
-descargas realizadas y la versión de los términos aceptada. Se usan solo para seguridad y auditoría del acceso. No se
+descargas realizadas y la versión de los términos aceptada. Se usan solo para seguridad y auditoría del acceso.
+Si creas una contraseña propia, se guarda solo su huella cifrada (PBKDF2) en una hoja de control del operador, y
+para crearla o recuperarla te enviamos a tu correo un código de un solo uso que vence en 15 minutos. No se
 guardan contraseñas (solo una huella cifrada), direcciones IP ni datos de navegación.
 
 **Derechos de los titulares.** Conocer, actualizar, rectificar y suprimir sus datos, solicitar prueba de la
@@ -102,7 +104,8 @@ def terminos_md() -> str:
 ### Términos de uso
 
 1. **Quién puede usarla.** Solo personas autorizadas por Atenea o por Kuepa EduTech para el seguimiento del contrato
-   {CONTRATO}. Las credenciales son personales e intransferibles.
+   {CONTRATO}. Las credenciales son personales e intransferibles. Quien crea su contraseña con el código enviado a su
+   correo es responsable de guardarla y de no compartirla; si la olvida, la recupera con un código nuevo.
 2. **Uso permitido.** Consultar el avance del programa y de sus participantes para fines de supervisión, interventoría,
    gestión académica y rendición de cuentas del contrato. Cualquier otro uso está prohibido.
 3. **Confidencialidad.** La información es reservada. No la compartas, publiques ni reenvíes a terceros no

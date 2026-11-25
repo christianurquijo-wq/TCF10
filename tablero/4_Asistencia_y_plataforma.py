@@ -19,11 +19,14 @@ if not ids:
     st.info("No hay beneficiarios con esos filtros.")
     st.stop()
 
-asis, prog = data.agregados(tuple(sorted(int(x) for x in df["id_sis"].dropna().unique())))
+_corte = ui.fecha_corte()
+asis, prog = data.agregados(tuple(sorted(int(x) for x in df["id_sis"].dropna().unique())),
+                            _corte if _corte < ui.hoy_real() else None)
 grupos_sel = set(base["grupo"])
 asis = asis[asis["grupo"].isin(grupos_sel)].copy()
 # Los docentes registran la asistencia después de la clase: lo de las últimas 24 h es «por registrar», no «sin registro».
-limite = pd.Timestamp(datetime.now(ui.TZ).replace(tzinfo=None)) - pd.Timedelta(hours=C.REGISTRO_GRACIA_HORAS)
+limite = (min(pd.Timestamp(datetime.now(ui.TZ).replace(tzinfo=None)), _corte + pd.Timedelta(days=1))
+          - pd.Timedelta(hours=C.REGISTRO_GRACIA_HORAS))
 reciente = asis["fecha"] >= limite.normalize()
 por_registrar = int(asis.loc[reciente, "sin_registro"].sum())
 asis.loc[reciente, "sin_registro"] = 0

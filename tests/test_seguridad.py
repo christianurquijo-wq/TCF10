@@ -90,3 +90,59 @@ def test_zip_vistas_crudas(monkeypatch):
     texto = zf.read("VTD10_student_basic_info.csv").decode("utf-8-sig")
     assert texto.splitlines() == ["id_sis,nombre", '1,"Ana, Pérez"', "2,"]
     assert set(filas.values()) == {2}
+
+
+# ------------------------------------------------------------------ usuarios con contraseña propia
+class HojaUsuarios:
+    def __init__(self):
+        self.valores = [["Correo", "Nombre", "Estado"] + ["hash_contrasena", "creada", "actualizada", "codigo_hash",
+                                                           "codigo_vence", "codigo_intentos", "envios"],
+                        ["ana@agenciaatenea.gov.co", "Ana", "Activo"] + [""] * 7,
+                        ["luis@agenciaatenea.gov.co", "Luis", "Inactivo"] + [""] * 7]
+
+    def get_all_values(self):
+        return [list(f) for f in self.valores]
+
+    def batch_update(self, datos, value_input_option=None):
+        from gspread.utils import a1_to_rowcol
+        for d in datos:
+            f, c = a1_to_rowcol(d["range"])
+            self.valores[f - 1][c - 1] = d["values"][0][0]
+
+
+@pytest.fixture
+def hoja_usuarios(monkeypatch):
+    from vista_atenea import usuarios as U
+    h = HojaUsuarios()
+    enviados = []
+    monkeypatch.setattr(U, "_hoja", lambda: h)
+    monkeypatch.setattr(U, "_cfg", lambda: {"correo_url": "x", "correo_secreto": "clave"})
+    monkeypatch.setattr(U, "_enviar", lambda correo, nombre, codigo: enviados.append((correo, codigo)) or True)
+    monkeypatch.setattr(S, "registrar", lambda *a, **k: None)
+    return U, h, enviados
+
+
+def test_crear_contrasena_con_codigo(hoja_usuarios):
+    U, h, enviados = hoja_usuarios
+    assert U.solicitar_codigo("Ana@AgenciaAtenea.gov.co") == "ok" and len(enviados) == 1
+    codigo = enviados[0][1]
+    assert codigo not in str(h.valores)                     # el código no se guarda en claro
+    assert U.cambiar_con_codigo("ana@agenciaatenea.gov.co", "000000" if codigo != "000000" else "111111",
+                                "Clave12345x") == "codigo"
+    assert U.cambiar_con_codigo("ana@agenciaatenea.gov.co", codigo, "Clave12345x") == "ok"
+    assert "Clave12345x" not in str(h.valores)              # solo la huella
+    assert U.verificar_ingreso("ana@agenciaatenea.gov.co", "Clave12345x")["nombre"] == "Ana"
+    assert U.verificar_ingreso("ana@agenciaatenea.gov.co", "otra") is None
+    assert U.cambiar_con_codigo("ana@agenciaatenea.gov.co", codigo, "Clave12345y") == "codigo"  # un solo uso
+
+
+def test_no_autorizados_y_limite(hoja_usuarios):
+    U, h, enviados = hoja_usuarios
+    assert U.solicitar_codigo("luis@agenciaatenea.gov.co") == "ok" and not enviados     # inactivo: no se envía
+    assert U.solicitar_codigo("nadie@agenciaatenea.gov.co") == "ok" and not enviados    # no está en la lista
+    for _ in range(3):
+        assert U.solicitar_codigo("ana@agenciaatenea.gov.co") == "ok"
+    assert U.solicitar_codigo("ana@agenciaatenea.gov.co") == "limite"
+    assert U.validar_contrasena("corta1", "corta1")
+    assert U.validar_contrasena("soloLetrasLargas", "soloLetrasLargas")
+    assert U.validar_contrasena("Clave12345x", "Clave12345x") == ""

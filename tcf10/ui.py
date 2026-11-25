@@ -234,14 +234,43 @@ def iniciales(nombre: str) -> str:
     return "".join(p[0].upper() + "." for p in partes[:4]) or "–"
 
 
+def hoy_real() -> pd.Timestamp:
+    return HOY_DEMO if data.modo_demo() else pd.Timestamp(datetime.now(TZ).date())
+
+
+def fecha_corte() -> pd.Timestamp:
+    """Fecha de corte elegida en la banda (por defecto, hoy). Toda la app se construye hasta ese día."""
+    hoy = hoy_real()
+    elegido = st.session_state.get("corte")
+    if elegido is None:
+        return hoy
+    corte = pd.Timestamp(elegido).normalize()
+    return min(corte, hoy)
+
+
+def selector_corte(contenedor=None) -> None:
+    """Calendario de la fecha de corte (vale para todas las páginas, en las dos vistas)."""
+    import datetime as _dt
+    hoy = hoy_real().date()
+    destino = contenedor or st
+    if "corte" not in st.session_state or st.session_state["corte"] is None or st.session_state["corte"] > hoy:
+        st.session_state["corte"] = hoy
+    destino.date_input("Fecha de corte", key="corte", min_value=_dt.date(2026, 10, 1), max_value=hoy,
+                       format="DD/MM/YYYY", help="Muestra todos los datos construidos hasta ese día (incluido).")
+
+
 @st.cache_data(ttl=data.TTL, show_spinner="Cargando datos…")
-def _preparado(hoy: pd.Timestamp, version: str = "") -> tuple[pd.DataFrame, bool]:  # version: solo llave del caché
-    benef, avance, cohortes, demo = data.cargar()
+def _preparado(hoy: pd.Timestamp, version: str = "", es_corte: bool = False) -> tuple[pd.DataFrame, bool]:
+    """version: solo llave del caché. es_corte: `hoy` es una fecha pasada elegida en el filtro de fecha de corte."""
+    benef, avance, cohortes, demo = data.cargar(hoy if es_corte else None)
     df = metrics.preparar(benef, avance, cohortes, hoy)
     try:  # seguimiento de Feedbacks (vista interna); si la fuente no los trae, la página lo avisa
         ids = tuple(sorted(int(x) for x in df["id_sis"].dropna().unique() if int(x) > 0))
-        asis, _ = data.agregados(ids)
-        df = metrics.feedback(df, data.feedbacks(), asis, hoy)
+        asis, _ = data.agregados(ids, hoy if es_corte else None)
+        fb = data.feedbacks()
+        if es_corte and len(fb) and "fecha" in fb:
+            fb = fb[fb["fecha"].isna() | (pd.to_datetime(fb["fecha"]).dt.normalize() <= hoy)]
+        df = metrics.feedback(df, fb, asis, hoy)
     except Exception as e:  # noqa: BLE001 -- los Feedbacks nunca deben tumbar el resto del tablero
         df.attrs["feedback_error"] = f"{type(e).__name__}: {e}"
     return df, demo
@@ -249,9 +278,9 @@ def _preparado(hoy: pd.Timestamp, version: str = "") -> tuple[pd.DataFrame, bool
 
 def datos() -> pd.DataFrame:
     """Datos listos para las páginas + banner si es demostración."""
-    hoy = HOY_DEMO if data.modo_demo() else pd.Timestamp(datetime.now(TZ).date())
+    hoy = fecha_corte()
     try:
-        df, demo = _preparado(hoy, getattr(metrics, "VERSION", ""))
+        df, demo = _preparado(hoy, getattr(metrics, "VERSION", ""), hoy < hoy_real())
     except data.ErrorConfiguracion as e:
         st.error(str(e), icon=":material/error:")
         st.stop()

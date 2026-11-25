@@ -1,4 +1,4 @@
-"""Datos de la ficha integral de un participante: sesiones, trayectoria diaria de horas, cursos y última lección.
+"""Datos de la ficha integral de un participante: sesiones, trayectoria diaria de horas, recursos y último recurso.
 
 Con el SIS en Google Sheets se arma con las pestañas VTD10 (asistencia por sesión, ingresos con tiempo en
 plataforma y progreso por lección). En modo demo se generan datos sintéticos coherentes con la fila del tablero.
@@ -29,7 +29,9 @@ def detalle(f: pd.Series, hoy: pd.Timestamp) -> dict:
     horas_sesion = float(C.HORAS_POR_SESION)
 
     s = t["asis_det"][t["asis_det"]["id_sis"] == pid].copy()
-    s["estado"] = np.select([s["attended"] > 0, s["not_attended"] > 0, s["is_past_session"]],
+    # hoy = fecha de corte: lo posterior a ese día aún no había pasado
+    pasada = s["is_past_session"] & (s["session_date"].dt.normalize() <= hoy)
+    s["estado"] = np.select([pasada & (s["attended"] > 0), pasada & (s["not_attended"] > 0), pasada],
                             ["Asistió", "No asistió", "Sin registro"], default="Programada")
     sesiones = (s.sort_values("session_date")
                   .rename(columns={"session_date": "fecha", "session_number": "sesion"})[["fecha", "sesion", "estado"]])
@@ -38,7 +40,7 @@ def detalle(f: pd.Series, hoy: pd.Timestamp) -> dict:
     # ingreso a la plataforma (login_activity), escaladas al total que reporta el SIS por curso.
     sinc = sesiones[sesiones["estado"] == "Asistió"].assign(h_sinc=horas_sesion)
     sinc = sinc.groupby(sinc["fecha"].dt.normalize())["h_sinc"].sum()
-    lg = t["login"][t["login"]["id_sis"] == pid]
+    lg = t["login"][(t["login"]["id_sis"] == pid) & (t["login"]["log_date"].dt.normalize() <= hoy)]
     if "time_view" in lg:
         tv = lg.groupby(lg["log_date"].dt.normalize())["time_view"].sum()
     else:  # caché de una versión anterior sin el tiempo por ingreso: se reparte igual entre los días de ingreso
@@ -48,22 +50,34 @@ def detalle(f: pd.Series, hoy: pd.Timestamp) -> dict:
     diario = pd.concat([sinc.rename("h_sinc"), asinc.rename("h_asinc")], axis=1).fillna(0).sort_index()
     diario.index.name = "fecha"
 
-    c = t["prog_cur"][t["prog_cur"]["id_sis"] == pid]
-    cursos = pd.DataFrame({
-        "curso": c["course_name"].astype(str), "avance": (c["course_completed_status"].fillna(0) / 100).clip(0, 1),
-        "completadas": c["lessons_completed"].fillna(0).astype(int), "activas": c["lessons_active"].fillna(0).astype(int),
-        "estado": c["progress_status"].map({"completado": "Completado", "en_progreso": "En progreso",
-                                            "sin_iniciar": "Sin iniciar"}).fillna("Sin iniciar")})
-    ultima = sis_sheet.ultima_leccion(t, pid)
-    return {"sesiones": sesiones.reset_index(drop=True), "diario": diario.reset_index(), "cursos": cursos,
-            "ultima_leccion": ultima}
+    # Recursos completados hasta la fecha de corte: la gráfica por curso y la tabla salen de las mismas filas, que
+    # son las que suman las horas asincrónicas (pedagogical_time de recursos completados).
+    rec = sis_sheet.recursos(t, [pid], hoy)
+    ultima = None
+    if len(rec):
+        u = rec.dropna(subset=["fecha"]).sort_values("fecha")
+        if len(u):
+            ultima = (str(u.iloc[-1]["recurso"]), u.iloc[-1]["fecha"], str(u.iloc[-1]["curso"]))
+    elif not sis_sheet.hay_recursos(t):
+        ultima = sis_sheet.ultima_leccion(t, pid)
+    return {"sesiones": sesiones.reset_index(drop=True), "diario": diario.reset_index(), "cursos": cursos_de(rec),
+            "recursos": rec, "ultima_leccion": ultima, "hay_recursos": sis_sheet.hay_recursos(t)}
+
+
+def cursos_de(rec: pd.DataFrame) -> pd.DataFrame:
+    """Recursos completados y horas por curso (lo que dibuja la gráfica «Avance por curso»)."""
+    if rec.empty:
+        return pd.DataFrame(columns=["curso", "recursos", "horas"])
+    return (rec.groupby("curso", dropna=False).agg(recursos=("recurso", "size"), horas=("horas", "sum"))
+               .reset_index().sort_values("curso"))
 
 
 def _vacio() -> dict:
     return {"sesiones": pd.DataFrame(columns=["fecha", "sesion", "estado"]),
             "diario": pd.DataFrame(columns=["fecha", "h_sinc", "h_asinc"]),
-            "cursos": pd.DataFrame(columns=["curso", "avance", "completadas", "activas", "estado"]),
-            "ultima_leccion": None}
+            "cursos": cursos_de(pd.DataFrame(columns=["curso", "recurso", "horas"])),
+            "recursos": pd.DataFrame(columns=["id_sis", "curso", "leccion", "recurso", "fecha", "horas"]),
+            "ultima_leccion": None, "hay_recursos": True}
 
 
 def _demo(f: pd.Series, hoy: pd.Timestamp) -> dict:
@@ -89,16 +103,22 @@ def _demo(f: pd.Series, hoy: pd.Timestamp) -> dict:
     asinc = pesos / pesos.sum() * float(f["horas_asinc_val"]) if pesos.sum() > 0 else np.zeros(len(dias))
     diario = pd.DataFrame({"fecha": dias, "h_asinc": asinc})
     diario = diario.merge(pasadas[["fecha"]].assign(h_sinc=h_s), on="fecha", how="outer").fillna(0).sort_values("fecha")
-    avance_total = float(f["horas_validas"]) / C.HORAS_TOTALES
-    cursos = pd.DataFrame({"curso": ["Inducción", "Módulo 1", "Módulo 2", "Módulo 3"],
-                           "avance": np.clip([avance_total * 3, avance_total * 1.6, avance_total * .8, avance_total * .2],
-                                             0, 1)})
-    cursos["activas"] = [4, 12, 12, 10]
-    cursos["completadas"] = (cursos["avance"] * cursos["activas"]).round().astype(int)
-    cursos["estado"] = np.where(cursos["avance"] >= 1, "Completado", np.where(cursos["avance"] > 0, "En progreso",
-                                                                             "Sin iniciar"))
-    ultima = ("Lección 3 · Herramientas de IA para el servicio al cliente", hoy - pd.Timedelta(days=2), "Módulo 1")
-    return {"sesiones": sesiones, "diario": diario, "cursos": cursos, "ultima_leccion": ultima}
+    # Recursos sintéticos que suman exactamente las horas asincrónicas de la fila
+    total = float(f.get("horas_asinc", f["horas_asinc_val"]) or 0)
+    n = int(max(0, round(total / 0.6)))
+    filas = []
+    if n:
+        dur = rng.uniform(0.2, 1.0, n)
+        dur = dur / dur.sum() * total
+        fechas_r = sorted(rng.choice(dias, size=n)) if len(dias) else [hoy] * n
+        for k in range(n):
+            curso = ["Inducción", "Módulo 1", "Módulo 2", "Módulo 3"][min(3, k * 4 // n)]
+            filas.append({"id_sis": f["id_sis"], "curso": curso, "leccion": f"Tema {k // 3 + 1}",
+                          "recurso": f"Recurso {k + 1} · {curso}", "fecha": pd.Timestamp(fechas_r[k]), "horas": dur[k]})
+    rec = pd.DataFrame(filas, columns=["id_sis", "curso", "leccion", "recurso", "fecha", "horas"])
+    ultima = ((rec.iloc[-1]["recurso"], rec.iloc[-1]["fecha"], rec.iloc[-1]["curso"]) if len(rec) else None)
+    return {"sesiones": sesiones, "diario": diario, "cursos": cursos_de(rec), "recursos": rec,
+            "ultima_leccion": ultima, "hay_recursos": True}
 
 
 def proyeccion(f: pd.Series, hoy: pd.Timestamp) -> tuple[str, str]:

@@ -79,10 +79,12 @@ if len(base) == 1:
 st.subheader(f"Participantes · {ui.num(len(base))}")
 base["persona"] = base["nombre"].map(ui.iniciales)
 base["id_sis_v"] = base["id_sis"].where(base["id_sis"] > 0)
+base["avance_63"] = (base["horas_validas"] / C.HORAS_CULMINACION).clip(upper=1) * 100
+base["avance_90"] = (base["horas_validas"] / C.HORAS_TOTALES).clip(upper=1) * 100
 base["_orden"] = base["riesgo"].map({e: i for i, e in enumerate(list(reversed(C.EN_CURSO)) + C.ESTADOS_FINALES)}).fillna(99)
 vista = base.sort_values(["_orden", "horas_validas"])[
     ["id_sis_v", "persona", "cohorte", "grupo", "franja", "estado", "horas_sinc_val", "horas_asinc_val",
-     "horas_validas", "tipo_ruta", "faltan_h", "sesiones_asistidas", "sesiones_registradas", "ultima_actividad",
+     "horas_validas", "avance_63", "avance_90", "tipo_ruta", "faltan_h", "sesiones_asistidas", "sesiones_registradas", "ultima_actividad",
      "riesgo", "motivo"]]
 st.dataframe(
     vista, hide_index=True, width="stretch", height=480,
@@ -93,6 +95,9 @@ st.dataframe(
         "horas_asinc_val": st.column_config.NumberColumn("Asincrónico (h)", format="%.1f"),
         "horas_validas": st.column_config.ProgressColumn("Horas completadas", format="%.1f", min_value=0,
                                                          max_value=C.HORAS_CULMINACION),
+        "avance_63": st.column_config.ProgressColumn("Avance a 63 h", format="%.0f %%", min_value=0, max_value=100),
+        "avance_90": st.column_config.ProgressColumn("Avance del curso (90 h)", format="%.0f %%", min_value=0,
+                                                     max_value=100),
         "tipo_ruta": "Ruta al 70 %", "faltan_h": st.column_config.NumberColumn("Faltan (h)", format="%.1f"),
         "sesiones_asistidas": st.column_config.NumberColumn("Asistió", format="%d"),
         "sesiones_registradas": st.column_config.NumberColumn("Registradas", format="%d"),
