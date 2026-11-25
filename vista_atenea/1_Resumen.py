@@ -36,13 +36,13 @@ with c[4]:
 
 st.write("")
 estilo.seccion("Estado de formación")
-st.caption("Participantes con su grupo en curso, según su avance frente a las horas que deberían llevar a hoy "
-           "según el calendario del grupo. Responde a los filtros de arriba.")
+st.caption("Participantes con su grupo en curso, según su ICP (Índice de Cumplimiento del Plan): su avance "
+           "frente a lo que el plan del curso espera a hoy. Responde a los filtros de arriba.")
 izq, der = st.columns([1.25, 1], gap="large")
 tot = max(1, en_curso)
 izq.dataframe(pd.DataFrame({
     "Estado formación": C.EN_CURSO,
-    "Avance frente al esperado": [C.rango_estado(e) for e in C.EN_CURSO],
+    "ICP": [C.rango_estado(e) for e in C.EN_CURSO],
     "Participantes": [ui.num(int(cuenta.get(e, 0))) for e in C.EN_CURSO],
     "%": [ui.pct(int(cuenta.get(e, 0)) / tot, 1) for e in C.EN_CURSO]}), hide_index=True, width="stretch")
 der.dataframe(pd.DataFrame({

@@ -16,7 +16,7 @@ from tcf10 import config as C
 NIVELES_RIESGO = C.EN_CURSO
 # Cambia cuando cambian las columnas que calcula preparar(): forma parte de la llave del caché de ui._preparado, así
 # un despliegue nuevo no reutiliza tablas viejas (nov-2026: «KeyError: 'critico'» tras agregar la tipificación).
-VERSION = "2026-11-25 estados"
+VERSION = "2026-11-25 icp"
 
 
 def _n(x) -> str:
@@ -72,8 +72,14 @@ def preparar(benef: pd.DataFrame, avance: pd.DataFrame, cohortes: pd.DataFrame,
         df[c] = pd.to_numeric(df[c], errors="coerce") if c in df else np.nan
     duracion = (fin - inicio).dt.days.clip(lower=1)
     transcurrido = ((hoy - inicio).dt.days / duracion).clip(lower=0, upper=1)
-    df["avance_esperado_h"] = C.HORAS_TOTALES * transcurrido
+    # Esperado a hoy = línea base del plan del curso (ICP, nov-2026), no el reparto lineal del calendario.
+    dias_grupo = (hoy - inicio).dt.days
+    df["linea_base"] = [C.linea_base(p, n, d) for p, n, d in zip(df.get("perfil", pd.Series("", index=df.index)),
+                                                                  df.get("nivel", pd.Series("", index=df.index)),
+                                                                  dias_grupo)]
+    df["avance_esperado_h"] = C.HORAS_TOTALES * df["linea_base"]
     df["ritmo"] = np.where(df["avance_esperado_h"] > 0, df["horas_validas"] / df["avance_esperado_h"], np.nan)
+    df["transcurrido"] = transcurrido
     ultima = pd.to_datetime(df.get("ultima_actividad"), errors="coerce")
     referencia = ultima.fillna(inicio)
     df["dias_sin_actividad"] = (hoy - referencia).dt.days.clip(lower=0)
@@ -82,6 +88,7 @@ def preparar(benef: pd.DataFrame, avance: pd.DataFrame, cohortes: pd.DataFrame,
     df["cohorte_cerrada"] = fin < hoy
 
     df["pct_esperado"] = pd.to_numeric(df.apply(avance_frente_esperado, axis=1), errors="coerce")
+    df["icp"] = df["pct_esperado"]  # Índice de Cumplimiento del Plan (mismo valor, nombre del informe a Atenea)
     df["riesgo"] = df.apply(_riesgo, axis=1)  # estado del participante (nombre de columna histórico)
     df = tipificar(df, hoy)
     df["prob_culminar"] = np.select(
@@ -91,18 +98,14 @@ def preparar(benef: pd.DataFrame, avance: pd.DataFrame, cohortes: pd.DataFrame,
 
 
 def avance_frente_esperado(f: pd.Series) -> float | None:
-    """% de avance frente a lo esperado a la fecha (base de los estados de formación). En las primeras semanas,
-    cuando todavía se esperan menos de RIESGO_MIN_ESPERADO_H horas, el ritmo de horas no es representativo y se usa
-    la asistencia (sesiones asistidas ÷ registradas, con al menos RIESGO_MIN_SESIONES). None = aún sin evidencia."""
+    """ICP: (horas válidas ÷ 90 h) ÷ línea base de la semana en curso de su grupo (= horas válidas ÷ horas que el plan
+    del curso espera a hoy). None el día de inicio (aún no se espera nada)."""
     if f.get("en_sis") in (False,):  # formalizado sin usuario en la plataforma: no puede estudiar
         return 0.0
     esperado = f.get("avance_esperado_h")
-    if pd.notna(esperado) and esperado >= C.RIESGO_MIN_ESPERADO_H:
-        return float(f["horas_validas"]) / float(esperado)
-    reg, asis = f.get("sesiones_registradas"), f.get("sesiones_asistidas")
-    if pd.notna(reg) and reg >= C.RIESGO_MIN_SESIONES:
-        return float(asis or 0) / float(reg)
-    return None
+    if pd.isna(esperado) or esperado <= 0:
+        return None
+    return float(f["horas_validas"]) / float(esperado)
 
 
 def _riesgo(f: pd.Series) -> str:
@@ -122,18 +125,15 @@ def _riesgo(f: pd.Series) -> str:
 
 
 def motivo_riesgo(f: pd.Series) -> str:
-    """Explicación corta del estado de formación."""
+    """Explicación corta del ICP."""
     if f.get("en_sis") in (False,):
         return "formalizado pero sin usuario en el SIS"
-    pct = f.get("pct_esperado")
-    if pct is None or pd.isna(pct):
-        return "aún sin sesiones suficientes para medir"
-    esperado = f.get("avance_esperado_h")
-    if pd.notna(esperado) and esperado >= C.RIESGO_MIN_ESPERADO_H:
-        texto = (f"{f['horas_validas']:.1f} h de {esperado:.1f} h esperadas a hoy ({pct * 100:.0f} %)").replace(".", ",")
-    else:
-        texto = (f"inicio del grupo: asistió a {int(f.get('sesiones_asistidas') or 0)} de "
-                 f"{int(f['sesiones_registradas'])} sesiones ({pct * 100:.0f} %)")
+    icp = f.get("pct_esperado")
+    if icp is None or pd.isna(icp):
+        return "su grupo inicia hoy: aún no se espera avance"
+    lb = float(f.get("linea_base") or 0)
+    texto = (f"ICP {icp * 100:.0f} %: {f['horas_validas']:.1f} h ({f['horas_validas'] / C.HORAS_TOTALES * 100:.0f} %) "
+             f"frente a {lb * 100:.0f} % del plan a hoy").replace(".", ",")
     if f.get("dias_sin_actividad", 0) >= 7:
         texto += f"; {int(f['dias_sin_actividad'])} días sin actividad"
     return texto

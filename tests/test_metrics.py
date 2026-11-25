@@ -93,14 +93,17 @@ def _estado(**kw):
     return M._riesgo(f)
 
 
-def test_estado_fase_inicial_por_asistencia():
-    # Se esperan < 9 h: manda la asistencia (asistidas ÷ registradas)
-    assert _estado(sesiones_registradas=3, sesiones_asistidas=0) == C.INACTIVO
-    assert _estado(sesiones_registradas=4, sesiones_asistidas=1) == C.RIESGO_ALTO       # 25 %
-    assert _estado(sesiones_registradas=4, sesiones_asistidas=2) == C.RIESGO_BAJO       # 50 %
-    assert _estado(sesiones_registradas=3, sesiones_asistidas=2) == C.EN_SEGUIMIENTO    # 67 %
-    assert _estado(sesiones_registradas=4, sesiones_asistidas=3) == C.EN_FORMACION      # 75 %
-    assert _estado(sesiones_registradas=1, sesiones_asistidas=0) == C.EN_FORMACION      # aún sin evidencia
+def test_linea_base_icp_como_la_db_formacion():
+    # Valores de «Líneas Base - Consolidada» (Marketing Básico): semana 3 = 64,48 %, semana 8 = 100 %
+    assert abs(C.linea_base("Marketing y finanzas", "Básico", 21) - 0.64478) < 1e-4
+    assert C.linea_base("Auxiliar y servicio al cliente", "Avanzado", 56) == 1.0
+    assert C.linea_base("Marketing y finanzas", "Básico", 0) == 0.0
+    # Interpolada: a mitad de la semana 1 se espera la mitad de la semana 1
+    assert abs(C.linea_base("Marketing y finanzas", "Básico", 3.5) - 0.20847 / 2) < 1e-4
+    # Ejemplo del informe: 40 h en la semana 3 → ICP = (40/90) ÷ 64,48 % ≈ 69 % → En Seguimiento
+    esperado = 90 * C.linea_base("Marketing y finanzas", "Básico", 21)
+    assert _estado(avance_esperado_h=esperado, horas_validas=40.0) == C.EN_SEGUIMIENTO
+    assert _estado(avance_esperado_h=0.0) == C.EN_FORMACION   # día de inicio: aún no se espera nada
 
 
 def test_estado_por_avance_esperado_y_finales():

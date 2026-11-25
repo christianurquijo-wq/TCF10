@@ -7,7 +7,7 @@ from tcf10 import metrics as M
 from tcf10 import ui
 
 ui.inicio("Avance y estado de formación", f"Horas válidas frente a la meta de {ui.num(C.HORAS_CULMINACION)} h "
-          f"(70 % de {ui.num(C.HORAS_TOTALES)} h) y estado según el avance esperado a hoy")
+          f"(70 % de {ui.num(C.HORAS_TOTALES)} h) y estado según el ICP (cumplimiento del plan a hoy)")
 df = ui.datos()
 df = ui.barra_filtros(df, "av", ("cohorte", "perfil", "nivel", "grupo", "franja", "docente"))
 en_curso = df[df["riesgo"].isin(C.EN_CURSO)]
@@ -16,7 +16,7 @@ ORDEN = {e: i for i, e in enumerate(reversed(C.EN_CURSO))}  # Matriculado Inacti
 cols = st.columns(len(C.EN_CURSO))
 for col, (estado, _) in zip(cols, C.ESTADOS_FORMACION):
     n = int(en_curso["riesgo"].eq(estado).sum())
-    nota = f"{C.rango_estado(estado)} del avance esperado"
+    nota = f"ICP {C.rango_estado(estado)}"
     if estado in (C.RIESGO_ALTO, C.INACTIVO):
         nota += f" · {ui.plata(n * C.VALOR_POR_CULMINADO)} en juego"
     with col:
@@ -75,14 +75,14 @@ with t_lista:
         vista, hide_index=True, width="stretch", height=520,
         column_config={
             "riesgo": st.column_config.TextColumn("Estado formación", pinned=True),
-            "pct_esp": st.column_config.NumberColumn("% del esperado", format="%.0f %%"),
+            "pct_esp": st.column_config.NumberColumn("ICP", format="%.0f %%"),
             "id_sis": st.column_config.NumberColumn("ID SIS", format="%d"), "persona": "Iniciales",
             "cohorte": "Cohorte", "grupo": "Grupo", "docente": "Docente", "gestor": "Gestor",
             "horas_sinc_val": st.column_config.NumberColumn("Sincrónico (h)", format="%.1f"),
             "horas_asinc_val": st.column_config.NumberColumn("Asincrónico (h)", format="%.1f"),
             "horas_validas": st.column_config.ProgressColumn("Horas válidas", format="%.1f",
                                                              min_value=0, max_value=C.HORAS_CULMINACION),
-            "avance_esperado_h": st.column_config.NumberColumn("Esperado hoy (h)", format="%.1f"),
+            "avance_esperado_h": st.column_config.NumberColumn("Plan a hoy (h)", format="%.1f"),
             "faltan_h": st.column_config.NumberColumn("Faltan para 63 h", format="%.1f"),
             "dias_sin_actividad": st.column_config.NumberColumn("Días sin actividad", format="%d"),
             "motivo": "Por qué",

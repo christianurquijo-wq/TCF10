@@ -52,8 +52,8 @@ evento = st.dataframe(
         "nombre_completo": "Nombre", "tipo_documento": "Tipo doc.", "documento": "Documento", "cohorte": "Cohorte",
         "grupo": "Grupo", "franja": "Franja", "nivel": "Nivel", "perfil": "Programa", "estado_atenea": "Estado",
         "sesiones": "Sesiones asistidas",
-        "pct_esperado": st.column_config.NumberColumn("% del avance esperado", format="%.0f %%",
-                                                      help="Horas válidas ÷ horas que debería llevar hoy (define el estado de formación)"),
+        "pct_esperado": st.column_config.NumberColumn("ICP", format="%.0f %%",
+                                                      help="Índice de Cumplimiento del Plan: avance ÷ línea base del plan a hoy (define el estado de formación)"),
         "asistencia": st.column_config.NumberColumn("% asistencia", format="%.0f %%"),
         "horas_sinc_val": st.column_config.NumberColumn("Sincrónico (h)", format="%.1f"),
         "horas_asinc_val": st.column_config.NumberColumn("Asincrónico (h)", format="%.1f"),
@@ -65,7 +65,7 @@ evento = st.dataframe(
 exportar = vista[cols].rename(columns={
     "nombre_completo": "Nombre", "tipo_documento": "Tipo documento", "documento": "Documento", "cohorte": "Cohorte",
     "grupo": "Grupo", "franja": "Franja", "nivel": "Nivel", "perfil": "Programa", "estado_atenea": "Estado",
-    "pct_esperado": "% del avance esperado", "sesiones": "Sesiones asistidas", "asistencia": "% asistencia", "horas_sinc_val": "Horas sincrónico (asistencia)",
+    "pct_esperado": "ICP (%)", "sesiones": "Sesiones asistidas", "asistencia": "% asistencia", "horas_sinc_val": "Horas sincrónico (asistencia)",
     "horas_asinc_val": "Horas asincrónico (contenidos)", "horas_validas": "Horas válidas", "avance_meta": "% avance a 63 h",
     "ultima_actividad": "Última actividad"})
 exportar = exportar.round({c: 1 for c in exportar.select_dtypes("number").columns})

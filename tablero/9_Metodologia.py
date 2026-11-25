@@ -21,11 +21,13 @@ component_category = "resource" e is_completed = TRUE, igual que en Looker Studi
 certificación y situación laboral sale del Google Sheet operativo.
 
 **Estados del participante** (cuadro de parámetros de Kuepa EduTech, nov-2026):
-- **Estado de formación** (grupo en curso y aún sin el 70 %): % de avance = horas válidas ÷ horas esperadas a hoy
-  según el calendario de su grupo (90 h × días transcurridos ÷ duración). Mientras se esperan menos de
-  {ui.num(C.RIESGO_MIN_ESPERADO_H)} h (primeras semanas), el ritmo de horas no es representativo y se usa la
-  asistencia: sesiones asistidas ÷ registradas (con al menos {C.RIESGO_MIN_SESIONES} sesiones; antes de eso queda
-  en *{C.EN_FORMACION}*). Formalizado sin usuario en el SIS = *{C.INACTIVO}*.
+- **Estado de formación** (grupo en curso y aún sin el 70 %), según el ICP con los rangos del cuadro.
+  **ICP (Índice de Cumplimiento del Plan)** = (horas válidas ÷ 90 h) ÷ línea base. La **línea base** es el % del
+  curso que el plan cubre a hoy: horas planeadas acumuladas (sesiones sincrónicas y recursos asincrónicos del plan de
+  cada curso y nivel) ÷ 90 h, por semana desde el inicio del grupo e interpolada día a día (p. ej. Marketing Básico:
+  21 % al cerrar la semana 1, 64 % la 3, 88 % la 4 y 100 % la 8).
+  Igual que la hoja «Seg.Formación» de la DB Formación, pero con la semana de cada grupo (no una sola para todos).
+  El día de inicio del grupo queda en *{C.EN_FORMACION}*. Formalizado sin usuario en el SIS = *{C.INACTIVO}*.
 - **{C.APROBADO}:** apenas supera el 70 % ({ui.num(C.HORAS_CULMINACION)} h válidas).
 - **Al cerrar su grupo** sin llegar al 70 %: *{C.NO_APROBADO}*; si no registró ninguna hora, *{C.ABANDONO}*.
   Quien se retira: *{C.ABANDONO}* (voluntaria) en cualquier momento.

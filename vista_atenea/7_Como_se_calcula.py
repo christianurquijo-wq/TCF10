@@ -21,10 +21,13 @@ st.markdown(f"""
   pendientes de registro por el docente.
 
 #### Estados del participante
-- **Estado de formación** (grupo en curso, aún sin el 70 %): según su avance frente a las horas que debería llevar
-  a hoy según el calendario de su grupo — **{C.EN_FORMACION}** (≥ 75 %), **{C.EN_SEGUIMIENTO}** (60 % a < 75 %),
-  **{C.RIESGO_BAJO}** (40 % a < 60 %), **{C.RIESGO_ALTO}** (10 % a < 40 %) y **{C.INACTIVO}** (< 10 %). En las
-  primeras semanas, cuando aún se esperan pocas horas, se usa la asistencia a las sesiones.
+- **Estado de formación** (grupo en curso, aún sin el 70 %), según su ICP — **{C.EN_FORMACION}** (≥ 75 %),
+  **{C.EN_SEGUIMIENTO}** (60 % a < 75 %), **{C.RIESGO_BAJO}** (40 % a < 60 %), **{C.RIESGO_ALTO}** (10 % a < 40 %) y
+  **{C.INACTIVO}** (< 10 %).
+  **ICP (Índice de Cumplimiento del Plan)** = (horas válidas ÷ 90 h) ÷ línea base. La **línea base** es el % del
+  curso que el plan cubre a hoy: horas planeadas acumuladas (sesiones sincrónicas y recursos asincrónicos del plan de
+  cada curso y nivel) ÷ 90 h, por semana desde el inicio del grupo e interpolada día a día (p. ej. Marketing Básico:
+  21 % al cerrar la semana 1, 64 % la 3, 88 % la 4 y 100 % la 8).
 - **{C.APROBADO}:** supera el 70 % ({ui.num(C.HORAS_CULMINACION)} h válidas de {ui.num(C.HORAS_TOTALES)} h), en
   cuanto lo alcanza.
 - **{C.NO_APROBADO}:** su grupo cerró y no superó el 70 %.

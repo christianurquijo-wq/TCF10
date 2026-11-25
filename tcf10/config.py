@@ -106,11 +106,10 @@ PAGOS = {
 VALOR_POR_CULMINADO = PAGOS["culminacion"]["pct_costo_unitario"] * COSTO_UNITARIO  # 1.059.230,9
 
 # ------------------------------------------------------------------ estados del participante (cuadro Kuepa, nov-2026)
-# ESTADO FORMACIÓN (grupo en curso, sin llegar aún al 70 %): % de avance = horas válidas ÷ horas que debería llevar
-# hoy según el calendario de su grupo (90 h × días transcurridos ÷ duración). Mínimo >= y máximo <.
+# ESTADO FORMACIÓN (grupo en curso, sin llegar aún al 70 %): según el ICP (ver LINEA_BASE). Mínimo >= y máximo <.
 EN_FORMACION, EN_SEGUIMIENTO = "En Formación", "En Seguimiento"
 RIESGO_BAJO, RIESGO_ALTO, INACTIVO = "Riesgo Deserción Bajo", "Riesgo Deserción Alto", "Matriculado Inactivo"
-ESTADOS_FORMACION = [  # (estado, mínimo del % de avance esperado)
+ESTADOS_FORMACION = [  # (estado, ICP mínimo)
     (EN_FORMACION, 0.75), (EN_SEGUIMIENTO, 0.60), (RIESGO_BAJO, 0.40), (RIESGO_ALTO, 0.10), (INACTIVO, 0.0)]
 EN_CURSO = [e for e, _ in ESTADOS_FORMACION]
 # ESTADO FINAL: Aprobado apenas supera el 70 % (63 h válidas); No aprobado / Abandono al cerrar su grupo.
@@ -122,8 +121,55 @@ CONCEPTO_FINAL = {APROBADO: "Supera el 70 %", NO_APROBADO: "No supera el 70 %",
                   ABANDONO: "Voluntaria o no realiza la formación"}
 
 
+# ------------------------------------------------------------------ ICP (Índice de Cumplimiento del Plan)
+# Hoja «Líneas Base - Consolidada» de la DB Formación TCF10: % del curso (horas planeadas acumuladas ÷ 90 h) que el
+# plan cubre al terminar cada semana 1…8, por curso y nivel. Sale de «Líneas Base - Detalle» (cada sesión sincrónica
+# y cada recurso asincrónico con su semana y duración; 31,5 + 58,5 h por curso y nivel). Verificado nov-2026.
+# ICP = (horas válidas ÷ 90 h) ÷ línea base de la semana en curso del grupo (interpolada día a día).
+LINEA_BASE = {
+    ("Auxiliar", "Básico"): [0.23449, 0.43770, 0.68381, 0.89805, 0.93920, 0.96627, 0.97556, 1.0],
+    ("Auxiliar", "Intermedio"): [0.18750, 0.40696, 0.62331, 0.84469, 0.88821, 0.92413, 0.95987, 1.0],
+    ("Auxiliar", "Avanzado"): [0.21139, 0.40759, 0.61250, 0.81833, 0.85667, 0.92426, 0.96519, 1.0],
+    ("Marketing", "Básico"): [0.20847, 0.43024, 0.64478, 0.87626, 0.91131, 0.94372, 0.97163, 1.0],
+    ("Marketing", "Intermedio"): [0.20792, 0.42321, 0.62459, 0.86902, 0.89867, 0.92675, 0.96309, 1.0],
+    ("Marketing", "Avanzado"): [0.20183, 0.39406, 0.62643, 0.82987, 0.88232, 0.90861, 0.94677, 1.0],
+}
+SEMANAS_PLAN = 8
+# Sin curso o nivel reconocible: promedio de las 6 curvas.
+LINEA_BASE_PROMEDIO = [sum(v[i] for v in LINEA_BASE.values()) / len(LINEA_BASE) for i in range(SEMANAS_PLAN)]
+
+
+def _curso_plan(perfil: str) -> str | None:
+    t = str(perfil or "").lower()
+    if "auxiliar" in t:
+        return "Auxiliar"
+    if "marketing" in t or "oficinista" in t:
+        return "Marketing"
+    return None
+
+
+def _nivel_plan(nivel: str) -> str | None:
+    import unicodedata
+    t = "".join(c for c in unicodedata.normalize("NFKD", str(nivel or "")) if not unicodedata.combining(c)).lower()
+    return {"basico": "Básico", "intermedio": "Intermedio", "avanzado": "Avanzado"}.get(t.strip())
+
+
+def linea_base(perfil: str, nivel: str, dias: float) -> float:
+    """Fracción del curso (0-1) que el plan espera cubierta a `dias` días del inicio del grupo. Entre semanas se
+    interpola día a día: día 0 = 0 %, día 7 = semana 1, …, día 56 en adelante = 100 %."""
+    if dias is None or dias != dias or dias <= 0:
+        return 0.0
+    curva = LINEA_BASE.get((_curso_plan(perfil), _nivel_plan(nivel)), LINEA_BASE_PROMEDIO)
+    semana = min(float(dias) / 7.0, SEMANAS_PLAN)
+    k = int(semana)
+    previo = curva[k - 1] if k >= 1 else 0.0
+    if k >= SEMANAS_PLAN:
+        return curva[-1]
+    return previo + (curva[k] - previo) * (semana - k)
+
+
 def estado_por_avance(pct: float) -> str:
-    """% de avance frente al esperado → estado de formación (75 / 60 / 40 / 10 %)."""
+    """ICP → estado de formación (75 / 60 / 40 / 10 %)."""
     for estado, minimo in ESTADOS_FORMACION:
         if pct >= minimo - 1e-9:
             return estado

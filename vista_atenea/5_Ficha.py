@@ -42,7 +42,7 @@ det = FD.detalle(f, hoy)
 
 # ------------------------------------------------------------------ cabecera
 estado = f["estado_atenea"]
-etiqueta_estado = estado + (f" · {f['pct_esperado'] * 100:.0f} % del avance esperado"
+etiqueta_estado = estado + (f" · ICP {f['pct_esperado'] * 100:.0f} %"
                              if estado in C.EN_CURSO and pd.notna(f.get("pct_esperado")) else "")
 chips = [(etiqueta_estado, comun.COLOR_ESTADO.get(estado, ui.GRIS))] + [
     (str(f[c]), ui.AZUL_PROFUNDO) for c in ("cohorte", "grupo", "franja", "nivel", "perfil")
@@ -97,16 +97,19 @@ else:
                     fill="tozeroy", fillcolor="rgba(32,81,160,.10)")
     fig.add_scatter(x=d.index, y=d["sinc"], name=C.ETQ_SINC, mode="lines", line=dict(color=ui.AZUL, width=2))
     fig.add_scatter(x=d.index, y=d["asinc"], name=C.ETQ_ASINC, mode="lines", line=dict(color=ui.NARANJA, width=2))
-    if pd.notna(fin):
-        fig.add_scatter(x=[inicio, fin], y=[0, C.HORAS_TOTALES], name="Ritmo esperado", mode="lines",
-                        line=dict(color="#7A8199", width=2, dash="dot"))
+    # Línea base del plan del curso (la del ICP), día a día desde el inicio del grupo
+    plan_x = pd.date_range(inicio, inicio + pd.Timedelta(days=7 * C.SEMANAS_PLAN), freq="D")
+    plan_y = [C.HORAS_TOTALES * C.linea_base(f.get("perfil"), f.get("nivel"), (x - inicio).days) for x in plan_x]
+    fig.add_scatter(x=plan_x, y=plan_y, name="Plan del curso (línea base)", mode="lines",
+                    line=dict(color="#7A8199", width=2, dash="dot"))
     fig.add_hline(y=C.HORAS_CULMINACION, line_dash="dash", line_color=ui.NARANJA,
                   annotation_text=f"Aprobación (70 %): {ui.num(C.HORAS_CULMINACION)} h", annotation_position="top left")
     fig.update_layout(yaxis_title="Horas acumuladas", hovermode="x unified", legend=dict(orientation="h", y=1.12),
-                      xaxis=dict(range=[inicio, fin if pd.notna(fin) else hoy]), separators=",.")
+                      xaxis=dict(range=[inicio, max(fin, inicio + pd.Timedelta(days=7 * C.SEMANAS_PLAN)) if pd.notna(fin) else hoy]), separators=",.")
     ui.grafica_atenea(fig, 360)
     st.caption("Sincrónico (asistencia): sesiones asistidas con el docente. Asincrónico (contenidos): horas acreditadas en la plataforma, "
-               "distribuidas según los días de ingreso. La línea punteada es el avance esperado para completar 90 h al cierre.")
+               "distribuidas según los días de ingreso. La línea punteada es la línea base del plan del curso (horas "
+               "que el plan espera cubiertas cada día); el ICP compara las horas válidas con ella.")
 
 # ------------------------------------------------------------------ asistencia sesión por sesión
 izq, der = st.columns([1.35, 1])

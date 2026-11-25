@@ -616,7 +616,7 @@ def tablas_parametros() -> None:
         "Horas": [num(C.HORAS_SINCRONICAS, 1), num(C.HORAS_ASINCRONICAS, 1), num(C.HORAS_TOTALES)],
         "Peso": [pct(C.HORAS_SINCRONICAS / C.HORAS_TOTALES), pct(C.HORAS_ASINCRONICAS / C.HORAS_TOTALES), "100 %"]}),
         hide_index=True, width="stretch")
-    b.markdown("**Estado de formación** (grupo en curso)")
+    b.markdown("**Estado de formación** (grupo en curso, según el ICP)")
     filas = []
     for i, (e, minimo) in enumerate(C.ESTADOS_FORMACION):
         maximo = C.ESTADOS_FORMACION[i - 1][1] if i else 1.0
