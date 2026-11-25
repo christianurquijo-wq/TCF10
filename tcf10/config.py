@@ -16,8 +16,10 @@ FIN_CONTRATO = "2027-07-30"
 
 # ------------------------------------------------------------------ formación
 HORAS_TOTALES = 90.0
-HORAS_SINCRONICAS = 31.5                            # 35 %: solo docentes
-HORAS_ASINCRONICAS = 58.5                           # 65 %: plataforma + gestores
+HORAS_SINCRONICAS = 31.5                            # 35 %: Sincrónico (asistencia), solo docentes
+HORAS_ASINCRONICAS = 58.5                           # 65 %: Asincrónico (contenidos), plataforma + gestores
+ETQ_SINC = "Sincrónico (asistencia)"                # nombres de las modalidades (cuadro Kuepa EduTech, nov-2026)
+ETQ_ASINC = "Asincrónico (contenidos)"
 UMBRAL_CULMINACION = 0.70                           # culmina con >= 70 % de las 90 h
 HORAS_CULMINACION = HORAS_TOTALES * UMBRAL_CULMINACION  # 63 h
 USUARIOS_PRUEBA = (3172, 2980)  # incremental de cuentas de prueba del SIS (se excluyen de todo)
@@ -103,13 +105,38 @@ PAGOS = {
 }
 VALOR_POR_CULMINADO = PAGOS["culminacion"]["pct_costo_unitario"] * COSTO_UNITARIO  # 1.059.230,9
 
-# ------------------------------------------------------------------ riesgo (Anexo 8)
-# Se compara el avance real con el esperado a la fecha según el calendario de la cohorte.
-# Valores iniciales propuestos: validar con Atenea y el coordinador académico.
-RIESGO = {
-    "alto": {"ritmo_menor_a": 0.50, "dias_sin_actividad": 14},
-    "medio": {"ritmo_menor_a": 0.80, "dias_sin_actividad": 7},
-}
+# ------------------------------------------------------------------ estados del participante (cuadro Kuepa, nov-2026)
+# ESTADO FORMACIÓN (grupo en curso, sin llegar aún al 70 %): % de avance = horas válidas ÷ horas que debería llevar
+# hoy según el calendario de su grupo (90 h × días transcurridos ÷ duración). Mínimo >= y máximo <.
+EN_FORMACION, EN_SEGUIMIENTO = "En Formación", "En Seguimiento"
+RIESGO_BAJO, RIESGO_ALTO, INACTIVO = "Riesgo Deserción Bajo", "Riesgo Deserción Alto", "Matriculado Inactivo"
+ESTADOS_FORMACION = [  # (estado, mínimo del % de avance esperado)
+    (EN_FORMACION, 0.75), (EN_SEGUIMIENTO, 0.60), (RIESGO_BAJO, 0.40), (RIESGO_ALTO, 0.10), (INACTIVO, 0.0)]
+EN_CURSO = [e for e, _ in ESTADOS_FORMACION]
+# ESTADO FINAL: Aprobado apenas supera el 70 % (63 h válidas); No aprobado / Abandono al cerrar su grupo.
+APROBADO, NO_APROBADO, ABANDONO = "Aprobado Operador", "No Aprobado", "Abandono de Formación"
+ESTADOS_FINALES = [APROBADO, NO_APROBADO, ABANDONO]
+POR_INICIAR, NO_FORMALIZADO = "Por iniciar", "No formalizado"
+ORDEN_ESTADOS = EN_CURSO + ESTADOS_FINALES + [POR_INICIAR, NO_FORMALIZADO]
+CONCEPTO_FINAL = {APROBADO: "Supera el 70 %", NO_APROBADO: "No supera el 70 %",
+                  ABANDONO: "Voluntaria o no realiza la formación"}
+
+
+def estado_por_avance(pct: float) -> str:
+    """% de avance frente al esperado → estado de formación (75 / 60 / 40 / 10 %)."""
+    for estado, minimo in ESTADOS_FORMACION:
+        if pct >= minimo - 1e-9:
+            return estado
+    return INACTIVO
+
+
+def rango_estado(estado: str) -> str:
+    """«60 % a < 75 %» para mostrar en tablas y leyendas."""
+    for i, (e, minimo) in enumerate(ESTADOS_FORMACION):
+        if e == estado:
+            maximo = ESTADOS_FORMACION[i - 1][1] if i else 1.0
+            return f"{minimo * 100:.0f} % a < {maximo * 100:.0f} %" if i else f"≥ {minimo * 100:.0f} %"
+    return CONCEPTO_FINAL.get(estado, "")
 # El ritmo solo se evalúa cuando ya se esperaban al menos estas horas (evita alertas falsas en la
 # primera semana de una cohorte, cuando el esperado es casi cero).
 RIESGO_MIN_ESPERADO_H = 9.0     # 10 % de la formación
@@ -120,8 +147,8 @@ RIESGO_MIN_SESIONES = 2         # sesiones registradas mínimas para juzgar la a
 RIESGO_ASISTENCIA_MEDIO = 0.5   # asistió a menos de la mitad de las sesiones registradas → medio
 COHORTE_SEPARACION_DIAS = 21    # sin base de Atenea: grupos que inician con menos de 3 semanas de diferencia = misma cohorte
 REGISTRO_GRACIA_HORAS = 24      # una sesión de las últimas 24 h sin asistencia se cuenta como «por registrar»
-# Probabilidad de culminar según el nivel de riesgo, para la proyección de pagos (supuesto ajustable).
-PROB_CULMINAR = {"Bajo": 0.90, "Medio": 0.60, "Alto": 0.20}
+# Probabilidad de aprobar según el estado de formación, para la proyección de pagos (supuesto ajustable).
+PROB_CULMINAR = {EN_FORMACION: 0.90, EN_SEGUIMIENTO: 0.75, RIESGO_BAJO: 0.50, RIESGO_ALTO: 0.20, INACTIVO: 0.05}
 
 ESTADOS_ACTIVOS = {"Enrolado", "Activo"}
 ESTADOS = ["Enrolado", "Activo", "Culminado", "Retirado"]

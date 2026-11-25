@@ -73,7 +73,7 @@ def test_pago_culminacion_por_persona():
 
 def test_activo_rezagado_es_riesgo_alto():
     df = _base(n_activos=1)
-    assert df["riesgo"].iloc[0] == "Alto"  # 10 h cuando se esperaban ~60
+    assert df["riesgo"].iloc[0] == C.RIESGO_ALTO  # 10 h cuando se esperaban ~60 (≈ 17 % del esperado)
 
 
 def test_cohortes_agrupan_grupos_de_la_misma_semana():
@@ -85,15 +85,34 @@ def test_cohortes_agrupan_grupos_de_la_misma_semana():
     assert c[5] == "Sin grupo con fecha"
 
 
-def test_riesgo_fase_inicial_por_asistencia():
+def _estado(**kw):
     base = dict(retirado=False, enrolado=True, culmino=False, cohorte_iniciada=True, cohorte_cerrada=False,
-                dias_desde_inicio=8, dias_sin_actividad=2, ritmo=0.1, avance_esperado_h=12)
-    f = pd.Series({**base, "sesiones_registradas": 3, "sesiones_asistidas": 0, "horas_asinc": 0})
-    assert M._riesgo(f) == "Alto"
-    f = pd.Series({**base, "sesiones_registradas": 4, "sesiones_asistidas": 1, "horas_asinc": 0.5})
-    assert M._riesgo(f) == "Medio"
-    f = pd.Series({**base, "sesiones_registradas": 4, "sesiones_asistidas": 3, "horas_asinc": 0})
-    assert M._riesgo(f) == "Bajo"   # ritmo bajo no cuenta en la fase inicial
+                dias_desde_inicio=8, dias_sin_actividad=2, horas_validas=0.0, avance_esperado_h=6.0)
+    f = pd.Series({**base, **kw})
+    f["pct_esperado"] = M.avance_frente_esperado(f)
+    return M._riesgo(f)
+
+
+def test_estado_fase_inicial_por_asistencia():
+    # Se esperan < 9 h: manda la asistencia (asistidas ÷ registradas)
+    assert _estado(sesiones_registradas=3, sesiones_asistidas=0) == C.INACTIVO
+    assert _estado(sesiones_registradas=4, sesiones_asistidas=1) == C.RIESGO_ALTO       # 25 %
+    assert _estado(sesiones_registradas=4, sesiones_asistidas=2) == C.RIESGO_BAJO       # 50 %
+    assert _estado(sesiones_registradas=3, sesiones_asistidas=2) == C.EN_SEGUIMIENTO    # 67 %
+    assert _estado(sesiones_registradas=4, sesiones_asistidas=3) == C.EN_FORMACION      # 75 %
+    assert _estado(sesiones_registradas=1, sesiones_asistidas=0) == C.EN_FORMACION      # aún sin evidencia
+
+
+def test_estado_por_avance_esperado_y_finales():
+    assert _estado(avance_esperado_h=40.0, horas_validas=30.0) == C.EN_FORMACION        # 75 %
+    assert _estado(avance_esperado_h=40.0, horas_validas=29.0) == C.EN_SEGUIMIENTO      # 72,5 %
+    assert _estado(avance_esperado_h=40.0, horas_validas=3.0) == C.INACTIVO             # 7,5 %
+    assert _estado(culmino=True, horas_validas=63.0) == C.APROBADO
+    assert _estado(cohorte_cerrada=True, horas_validas=40.0) == C.NO_APROBADO
+    assert _estado(cohorte_cerrada=True, horas_validas=0.0) == C.ABANDONO
+    assert _estado(retirado=True) == C.ABANDONO
+    assert _estado(cohorte_iniciada=False) == C.POR_INICIAR
+    assert _estado(enrolado=False) == C.NO_FORMALIZADO
 
 
 def _persona(i, sinc_clases, asinc, a_la_fecha, totales, ult_plat, inicio="2026-11-01", fin="2026-12-30"):

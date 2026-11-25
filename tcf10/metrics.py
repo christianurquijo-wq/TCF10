@@ -13,10 +13,10 @@ import pandas as pd
 
 from tcf10 import config as C
 
-NIVELES_RIESGO = ["Alto", "Medio", "Bajo"]
+NIVELES_RIESGO = C.EN_CURSO
 # Cambia cuando cambian las columnas que calcula preparar(): forma parte de la llave del caché de ui._preparado, así
 # un despliegue nuevo no reutiliza tablas viejas (nov-2026: «KeyError: 'critico'» tras agregar la tipificación).
-VERSION = "2026-11-24 feedbacks"
+VERSION = "2026-11-25 estados"
 
 
 def _n(x) -> str:
@@ -81,7 +81,8 @@ def preparar(benef: pd.DataFrame, avance: pd.DataFrame, cohortes: pd.DataFrame,
     df["cohorte_iniciada"] = inicio <= hoy
     df["cohorte_cerrada"] = fin < hoy
 
-    df["riesgo"] = df.apply(_riesgo, axis=1)
+    df["pct_esperado"] = pd.to_numeric(df.apply(avance_frente_esperado, axis=1), errors="coerce")
+    df["riesgo"] = df.apply(_riesgo, axis=1)  # estado del participante (nombre de columna histórico)
     df = tipificar(df, hoy)
     df["prob_culminar"] = np.select(
         [df["culmino"], df["riesgo"].isin(C.PROB_CULMINAR)],
@@ -89,58 +90,53 @@ def preparar(benef: pd.DataFrame, avance: pd.DataFrame, cohortes: pd.DataFrame,
     return df
 
 
-def _riesgo(f: pd.Series) -> str:
-    if f["retirado"]:
-        return "Retirado"
-    if not f["enrolado"]:
-        return "Sin enrolar"
-    if f["culmino"]:
-        return "Culminó"
-    if not f["cohorte_iniciada"]:
-        return "Sin iniciar"
+def avance_frente_esperado(f: pd.Series) -> float | None:
+    """% de avance frente a lo esperado a la fecha (base de los estados de formación). En las primeras semanas,
+    cuando todavía se esperan menos de RIESGO_MIN_ESPERADO_H horas, el ritmo de horas no es representativo y se usa
+    la asistencia (sesiones asistidas ÷ registradas, con al menos RIESGO_MIN_SESIONES). None = aún sin evidencia."""
     if f.get("en_sis") in (False,):  # formalizado sin usuario en la plataforma: no puede estudiar
-        return "Alto"
+        return 0.0
+    esperado = f.get("avance_esperado_h")
+    if pd.notna(esperado) and esperado >= C.RIESGO_MIN_ESPERADO_H:
+        return float(f["horas_validas"]) / float(esperado)
+    reg, asis = f.get("sesiones_registradas"), f.get("sesiones_asistidas")
+    if pd.notna(reg) and reg >= C.RIESGO_MIN_SESIONES:
+        return float(asis or 0) / float(reg)
+    return None
+
+
+def _riesgo(f: pd.Series) -> str:
+    """Estado del participante (cuadro Kuepa EduTech, nov-2026): estado final o estado de formación."""
+    if not f["enrolado"]:
+        return C.NO_FORMALIZADO
+    if f["retirado"]:
+        return C.ABANDONO
+    if f["culmino"]:
+        return C.APROBADO
+    if not f["cohorte_iniciada"]:
+        return C.POR_INICIAR
     if f["cohorte_cerrada"]:
-        return "No culminó"
-    inactivo = f["dias_sin_actividad"] if f["dias_desde_inicio"] >= C.RIESGO_GRACIA_DIAS else 0
-    a, m = C.RIESGO["alto"], C.RIESGO["medio"]
-    # Fase inicial: manda la asistencia (el ritmo de horas aún no es representativo).
-    if pd.notna(f["dias_desde_inicio"]) and f["dias_desde_inicio"] < C.RIESGO_FASE_INICIAL_DIAS:
-        reg, asis = f.get("sesiones_registradas"), f.get("sesiones_asistidas")
-        if pd.notna(reg) and reg >= C.RIESGO_MIN_SESIONES:
-            if asis == 0 and f["horas_asinc"] <= 0:
-                return "Alto"
-            if asis / reg < C.RIESGO_ASISTENCIA_MEDIO:
-                return "Medio"
-        return "Medio" if inactivo >= m["dias_sin_actividad"] else "Bajo"
-    ritmo = f["ritmo"] if f["avance_esperado_h"] >= C.RIESGO_MIN_ESPERADO_H else np.nan
-    if (pd.notna(ritmo) and ritmo < a["ritmo_menor_a"]) or inactivo >= a["dias_sin_actividad"]:
-        return "Alto"
-    if (pd.notna(ritmo) and ritmo < m["ritmo_menor_a"]) or inactivo >= m["dias_sin_actividad"]:
-        return "Medio"
-    return "Bajo"
+        return C.ABANDONO if float(f["horas_validas"]) <= 0 else C.NO_APROBADO
+    pct = f.get("pct_esperado")
+    return C.EN_FORMACION if pct is None or pd.isna(pct) else C.estado_por_avance(pct)
 
 
 def motivo_riesgo(f: pd.Series) -> str:
-    partes = []
+    """Explicación corta del estado de formación."""
     if f.get("en_sis") in (False,):
         return "formalizado pero sin usuario en el SIS"
-    if (pd.notna(f.get("dias_desde_inicio")) and f["dias_desde_inicio"] < C.RIESGO_FASE_INICIAL_DIAS
-            and pd.notna(f.get("sesiones_registradas")) and f["sesiones_registradas"] >= C.RIESGO_MIN_SESIONES):
-        asis, reg = int(f["sesiones_asistidas"] or 0), int(f["sesiones_registradas"])
-        if asis == 0:
-            partes.append(f"no asistió a ninguna de {reg} sesiones" + ("" if f["horas_asinc"] > 0 else
-                                                                         " ni avanzó en plataforma"))
-        elif asis / reg < C.RIESGO_ASISTENCIA_MEDIO:
-            partes.append(f"asistió a {asis} de {reg} sesiones")
-        if f.get("dias_sin_actividad", 0) >= C.RIESGO["medio"]["dias_sin_actividad"]:
-            partes.append(f"{int(f['dias_sin_actividad'])} días sin actividad")
-        return "; ".join(partes)
-    if pd.notna(f.get("ritmo")) and f["ritmo"] < C.RIESGO["medio"]["ritmo_menor_a"]:
-        partes.append(f"va al {f['ritmo']:.0%} del ritmo esperado")
-    if f.get("dias_sin_actividad", 0) >= C.RIESGO["medio"]["dias_sin_actividad"]:
-        partes.append(f"{int(f['dias_sin_actividad'])} días sin actividad")
-    return "; ".join(partes)
+    pct = f.get("pct_esperado")
+    if pct is None or pd.isna(pct):
+        return "aún sin sesiones suficientes para medir"
+    esperado = f.get("avance_esperado_h")
+    if pd.notna(esperado) and esperado >= C.RIESGO_MIN_ESPERADO_H:
+        texto = (f"{f['horas_validas']:.1f} h de {esperado:.1f} h esperadas a hoy ({pct * 100:.0f} %)").replace(".", ",")
+    else:
+        texto = (f"inicio del grupo: asistió a {int(f.get('sesiones_asistidas') or 0)} de "
+                 f"{int(f['sesiones_registradas'])} sesiones ({pct * 100:.0f} %)")
+    if f.get("dias_sin_actividad", 0) >= 7:
+        texto += f"; {int(f['dias_sin_actividad'])} días sin actividad"
+    return texto
 
 
 # ------------------------------------------------------------------ pagos e índices
@@ -230,8 +226,9 @@ def por_cohorte(df: pd.DataFrame) -> pd.DataFrame:
     g = df.groupby("cohorte").agg(
         entregados=("id_sis", "size"), enrolados=("enrolado", "sum"), retirados=("retirado", "sum"),
         culminados=("culmino", "sum"), horas_promedio=("horas_validas", "mean"),
-        riesgo_alto=("riesgo", lambda s: int(s.eq("Alto").sum())),
-        riesgo_medio=("riesgo", lambda s: int(s.eq("Medio").sum())),
+        riesgo_alto=("riesgo", lambda s: int(s.eq(C.RIESGO_ALTO).sum())),
+        riesgo_bajo=("riesgo", lambda s: int(s.eq(C.RIESGO_BAJO).sum())),
+        inactivos=("riesgo", lambda s: int(s.eq(C.INACTIVO).sum())),
         fecha_inicio=("fecha_inicio", "first"), fecha_fin=("fecha_fin", "first")).reset_index()
     g["pct_enrolados"] = g["enrolados"] / g["entregados"]
     g["pct_culminados"] = np.where(g["enrolados"] > 0, g["culminados"] / g["enrolados"], np.nan)
@@ -259,7 +256,7 @@ def grupos(df: pd.DataFrame) -> pd.DataFrame:
         franja=("franja", moda), integrantes=("id_sis", "size"),
         activos=("estado", lambda s: int(s.isin(C.ESTADOS_ACTIVOS).sum())),
         culminados=("culmino", "sum"), horas_promedio=("horas_validas", "mean"),
-        riesgo_alto=("riesgo", lambda s: int(s.eq("Alto").sum()))).reset_index()
+        riesgo_alto=("riesgo", lambda s: int(s.isin([C.RIESGO_ALTO, C.INACTIVO]).sum()))).reset_index()
     g["excede_maximo"] = g["activos"] > C.MAX_ACTIVOS_POR_GRUPO
     return g.sort_values(["cohorte", "grupo"])
 

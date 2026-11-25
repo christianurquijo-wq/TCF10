@@ -35,12 +35,12 @@ if cedula:
 if estados:
     df = df[df["estado_atenea"].isin(estados)]
 
-df = df.assign(asistencia=comun.asistencia_personas(df) * 100,
+df = df.assign(asistencia=comun.asistencia_personas(df) * 100, pct_esperado=df["pct_esperado"] * 100,
                avance_meta=(df["horas_validas"] / C.HORAS_CULMINACION).clip(upper=1) * 100,
                sesiones=lambda x: x["sesiones_asistidas"].fillna(0).astype(int).astype(str) + " de "
                                   + x["sesiones_registradas"].fillna(0).astype(int).astype(str))
 cols = ["nombre_completo", "tipo_documento", "documento", "cohorte", "grupo", "franja", "nivel", "perfil",
-        "estado_atenea", "sesiones", "asistencia", "horas_sinc_val", "horas_asinc_val", "horas_validas",
+        "estado_atenea", "pct_esperado", "sesiones", "asistencia", "horas_sinc_val", "horas_asinc_val", "horas_validas",
         "avance_meta", "ultima_actividad"]
 vista = df.sort_values(["cohorte", "grupo", "nombre_completo"])[cols + ["id_sis"]].reset_index(drop=True)
 st.caption(f"{ui.num(len(vista))} participantes · selecciona una fila para abrir su ficha integral (con teclado: "
@@ -52,9 +52,11 @@ evento = st.dataframe(
         "nombre_completo": "Nombre", "tipo_documento": "Tipo doc.", "documento": "Documento", "cohorte": "Cohorte",
         "grupo": "Grupo", "franja": "Franja", "nivel": "Nivel", "perfil": "Programa", "estado_atenea": "Estado",
         "sesiones": "Sesiones asistidas",
+        "pct_esperado": st.column_config.NumberColumn("% del avance esperado", format="%.0f %%",
+                                                      help="Horas válidas ÷ horas que debería llevar hoy (define el estado de formación)"),
         "asistencia": st.column_config.NumberColumn("% asistencia", format="%.0f %%"),
-        "horas_sinc_val": st.column_config.NumberColumn("Sincrónicas (h)", format="%.1f"),
-        "horas_asinc_val": st.column_config.NumberColumn("Asincrónicas (h)", format="%.1f"),
+        "horas_sinc_val": st.column_config.NumberColumn("Sincrónico (h)", format="%.1f"),
+        "horas_asinc_val": st.column_config.NumberColumn("Asincrónico (h)", format="%.1f"),
         "horas_validas": st.column_config.NumberColumn("Horas válidas", format="%.1f"),
         "avance_meta": st.column_config.ProgressColumn("Avance a 63 h", format="%.0f %%", min_value=0, max_value=100),
         "ultima_actividad": st.column_config.DateColumn("Última actividad", format="DD/MM/YYYY"),
@@ -63,8 +65,8 @@ evento = st.dataframe(
 exportar = vista[cols].rename(columns={
     "nombre_completo": "Nombre", "tipo_documento": "Tipo documento", "documento": "Documento", "cohorte": "Cohorte",
     "grupo": "Grupo", "franja": "Franja", "nivel": "Nivel", "perfil": "Programa", "estado_atenea": "Estado",
-    "sesiones": "Sesiones asistidas", "asistencia": "% asistencia", "horas_sinc_val": "Horas sincrónicas",
-    "horas_asinc_val": "Horas asincrónicas", "horas_validas": "Horas válidas", "avance_meta": "% avance a 63 h",
+    "pct_esperado": "% del avance esperado", "sesiones": "Sesiones asistidas", "asistencia": "% asistencia", "horas_sinc_val": "Horas sincrónico (asistencia)",
+    "horas_asinc_val": "Horas asincrónico (contenidos)", "horas_validas": "Horas válidas", "avance_meta": "% avance a 63 h",
     "ultima_actividad": "Última actividad"})
 exportar = exportar.round({c: 1 for c in exportar.select_dtypes("number").columns})
 seguridad.boton_descarga("Descargar Excel", exportar, "TCF10_participantes.xlsx", "Participantes",

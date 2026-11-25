@@ -42,14 +42,16 @@ det = FD.detalle(f, hoy)
 
 # ------------------------------------------------------------------ cabecera
 estado = f["estado_atenea"]
-chips = [(estado, comun.COLOR_ESTADO.get(estado, ui.GRIS))] + [
+etiqueta_estado = estado + (f" · {f['pct_esperado'] * 100:.0f} % del avance esperado"
+                             if estado in C.EN_CURSO and pd.notna(f.get("pct_esperado")) else "")
+chips = [(etiqueta_estado, comun.COLOR_ESTADO.get(estado, ui.GRIS))] + [
     (str(f[c]), ui.AZUL_PROFUNDO) for c in ("cohorte", "grupo", "franja", "nivel", "perfil")
     if str(f.get(c, "")) not in ("", "Sin dato", "nan")]
 st.markdown(
     f"<div class='ficha-cab'><div class='ficha-nombre'>{f['nombre_completo'] or 'Participante'}</div>"
     f"<div class='ficha-datos'>{f['tipo_documento'] or ''} {f['documento'] or ''}"
     + "</div>"
-    + "".join(f"<span class='chip' style='background:{c}'>{t}</span>" for t, c in chips) + "</div>",
+    + "".join(f"<span class='chip' style='background:{c};color:{ui.texto_sobre(c)}'>{t}</span>" for t, c in chips) + "</div>",
     unsafe_allow_html=True)
 
 # ------------------------------------------------------------------ estado actual
@@ -68,10 +70,10 @@ with k[1]:
                "para culminar", "noche")
 with k[2]:
     estilo.kpi("Con docente + plataforma", f"{ui.num(f['horas_sinc_val'], 1)} + {ui.num(f['horas_asinc_val'], 1)}",
-               f"topes: {ui.num(C.HORAS_SINCRONICAS, 1)} h con docente y {ui.num(C.HORAS_ASINCRONICAS, 1)} h en plataforma",
+               f"topes: {ui.num(C.HORAS_SINCRONICAS, 1)} h sincrónico (asistencia) y {ui.num(C.HORAS_ASINCRONICAS, 1)} h asincrónico (contenidos)",
                "profundo")
 with k[3]:
-    estilo.kpi("Culminación estimada", valor_proy, nota_proy, "naranja")
+    estilo.kpi("Aprobación estimada", valor_proy, nota_proy, "naranja")
 with k[4]:
     estilo.kpi("Última actividad", ui.fecha_corta(f.get("ultima_actividad")),
                "sin registros" if pd.isna(dias_sin) else f"hace {int(dias_sin)} días", "celeste")
@@ -93,17 +95,17 @@ else:
     fig = go.Figure()
     fig.add_scatter(x=d.index, y=d["validas"], name="Horas válidas", mode="lines", line=dict(color=ui.NOCHE, width=3),
                     fill="tozeroy", fillcolor="rgba(32,81,160,.10)")
-    fig.add_scatter(x=d.index, y=d["sinc"], name="Sincrónicas", mode="lines", line=dict(color=ui.AZUL, width=2))
-    fig.add_scatter(x=d.index, y=d["asinc"], name="Asincrónicas", mode="lines", line=dict(color=ui.NARANJA, width=2))
+    fig.add_scatter(x=d.index, y=d["sinc"], name=C.ETQ_SINC, mode="lines", line=dict(color=ui.AZUL, width=2))
+    fig.add_scatter(x=d.index, y=d["asinc"], name=C.ETQ_ASINC, mode="lines", line=dict(color=ui.NARANJA, width=2))
     if pd.notna(fin):
         fig.add_scatter(x=[inicio, fin], y=[0, C.HORAS_TOTALES], name="Ritmo esperado", mode="lines",
                         line=dict(color="#7A8199", width=2, dash="dot"))
     fig.add_hline(y=C.HORAS_CULMINACION, line_dash="dash", line_color=ui.NARANJA,
-                  annotation_text=f"Culminación: {ui.num(C.HORAS_CULMINACION)} h", annotation_position="top left")
+                  annotation_text=f"Aprobación (70 %): {ui.num(C.HORAS_CULMINACION)} h", annotation_position="top left")
     fig.update_layout(yaxis_title="Horas acumuladas", hovermode="x unified", legend=dict(orientation="h", y=1.12),
                       xaxis=dict(range=[inicio, fin if pd.notna(fin) else hoy]), separators=",.")
     ui.grafica_atenea(fig, 360)
-    st.caption("Sincrónicas: sesiones asistidas con el docente. Asincrónicas: horas acreditadas en la plataforma, "
+    st.caption("Sincrónico (asistencia): sesiones asistidas con el docente. Asincrónico (contenidos): horas acreditadas en la plataforma, "
                "distribuidas según los días de ingreso. La línea punteada es el avance esperado para completar 90 h al cierre.")
 
 # ------------------------------------------------------------------ asistencia sesión por sesión
@@ -162,7 +164,7 @@ with der:
 
 # ------------------------------------------------------------------ comparación
 estilo.seccion("Comparación con su grupo y su cohorte")
-activos = todos[todos["estado_atenea"].isin(["En formación", "Culminó"])].assign(
+activos = todos[todos["estado_atenea"].isin(C.EN_CURSO + [C.APROBADO, C.NO_APROBADO])].assign(
     asistencia=comun.asistencia_personas(todos))
 grupo = activos[activos["grupo"] == f["grupo"]]
 cohorte = activos[activos["cohorte"] == f["cohorte"]]
@@ -182,9 +184,9 @@ with a:
 with b:
     fig = go.Figure()
     for (nombre, v), color in zip(serie.items(), colores):
-        fig.add_bar(name=nombre, x=["Sincrónicas", "Asincrónicas", "Válidas"], y=list(v[1:]), marker_color=color,
+        fig.add_bar(name=nombre, x=[C.ETQ_SINC, C.ETQ_ASINC, "Válidas"], y=list(v[1:]), marker_color=color,
                     text=[ui.num(x, 1) for x in v[1:]], textposition="outside")
     fig.update_layout(title="Horas", barmode="group", legend=dict(orientation="h", y=-0.18, x=0))
     ui.grafica_atenea(fig, 300)
-st.caption(f"Promedios de las personas en formación o que culminaron: {ui.num(len(grupo))} en el grupo y "
+st.caption(f"Promedios de las personas en curso, aprobadas o no aprobadas: {ui.num(len(grupo))} en el grupo y "
            f"{ui.num(len(cohorte))} en la cohorte.")

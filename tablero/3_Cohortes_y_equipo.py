@@ -93,9 +93,9 @@ with t_grupos:
         column_config={
             "cohorte": "Cohorte", "grupo": st.column_config.TextColumn("Grupo", pinned=True), "perfil": "Perfil",
             "nivel": "Nivel", "docente": "Docente", "gestor": "Gestor", "franja": "Jornada",
-            "integrantes": "Integrantes", "activos": "Activos", "culminados": "Culminaron",
+            "integrantes": "Integrantes", "activos": "Activos", "culminados": C.APROBADO,
             "horas_promedio": st.column_config.NumberColumn("Horas promedio", format="%.1f"),
-            "riesgo_alto": "Riesgo alto",
+            "riesgo_alto": f"{C.RIESGO_ALTO} o inactivos",
             "excede_maximo": st.column_config.CheckboxColumn(f"Más de {C.MAX_ACTIVOS_POR_GRUPO} activos"),
         })
 
@@ -113,7 +113,7 @@ with t_coh:
         coh[c] = coh[c] * 100
     st.dataframe(
         coh[["cohorte", "fecha_inicio", "fecha_fin", "entregados", "enrolados", "pct_enrolados", "retirados",
-             "desercion", "culminados", "pct_culminados", "horas_promedio", "riesgo_alto", "riesgo_medio"]],
+             "desercion", "culminados", "pct_culminados", "horas_promedio", "riesgo_alto", "riesgo_bajo", "inactivos"]],
         hide_index=True, width="stretch",
         column_config={
             "cohorte": st.column_config.TextColumn("Cohorte", pinned=True),
@@ -122,14 +122,14 @@ with t_coh:
             "entregados": "Entregados por Atenea", "enrolados": "Enrolados",
             "pct_enrolados": st.column_config.ProgressColumn("% enrolados", format="%.1f %%", min_value=0,
                                                              max_value=100),
-            "retirados": "Retirados",
+            "retirados": C.ABANDONO + " (retiro)",
             "desercion": st.column_config.NumberColumn("Deserción", format="%.1f %%"),
-            "culminados": "Culminaron",
-            "pct_culminados": st.column_config.NumberColumn("% culminación", format="%.1f %%"),
+            "culminados": C.APROBADO,
+            "pct_culminados": st.column_config.NumberColumn("% aprobados", format="%.1f %%"),
             "horas_promedio": st.column_config.NumberColumn("Horas válidas promedio", format="%.1f"),
-            "riesgo_alto": "Riesgo alto", "riesgo_medio": "Riesgo medio",
+            "riesgo_alto": C.RIESGO_ALTO, "riesgo_bajo": C.RIESGO_BAJO, "inactivos": C.INACTIVO,
         })
-    st.caption("Deserción = retirados ÷ enrolados. La matriz de riesgos del contrato marca como crítico superar "
+    st.caption("Deserción = retiros (abandono voluntario) ÷ enrolados. La matriz de riesgos del contrato marca como crítico superar "
                "el 30 %.")
 
 with t_alertas:

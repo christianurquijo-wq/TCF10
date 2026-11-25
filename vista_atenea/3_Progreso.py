@@ -10,7 +10,7 @@ from vista_atenea import comun, estilo
 estilo.pagina("Progreso", f"Horas válidas frente a la meta de {ui.num(C.HORAS_CULMINACION)} h y avance en los cursos")
 df = comun.filtrado(comun.todos())
 comun.nota_filtros()
-form = df[df["estado_atenea"].isin(["En formación", "Culminó"])]
+form = df[df["estado_atenea"].isin(C.EN_CURSO + [C.APROBADO, C.NO_APROBADO])]
 if form.empty:
     st.info("No hay participantes en formación para este filtro.")
     st.stop()
@@ -18,15 +18,15 @@ if form.empty:
 c = estilo.fila(4, "prog")
 with c[0]:
     estilo.kpi("Horas válidas promedio", ui.num(form["horas_validas"].mean(), 1),
-               f"de {ui.num(C.HORAS_CULMINACION)} h para culminar", "azul")
+               f"de {ui.num(C.HORAS_CULMINACION)} h para aprobar (70 %)", "azul")
 with c[1]:
-    estilo.kpi("Sincrónicas promedio", ui.num(form["horas_sinc_val"].mean(), 1),
-               f"tope {ui.num(C.HORAS_SINCRONICAS, 1)} h (clases con docente)", "noche")
+    estilo.kpi(f"{C.ETQ_SINC} promedio", ui.num(form["horas_sinc_val"].mean(), 1),
+               f"tope {ui.num(C.HORAS_SINCRONICAS, 1)} h · 35 % (clases con docente)", "noche")
 with c[2]:
-    estilo.kpi("Asincrónicas promedio", ui.num(form["horas_asinc_val"].mean(), 1),
-               f"tope {ui.num(C.HORAS_ASINCRONICAS, 1)} h (plataforma)", "noche")
+    estilo.kpi(f"{C.ETQ_ASINC} promedio", ui.num(form["horas_asinc_val"].mean(), 1),
+               f"tope {ui.num(C.HORAS_ASINCRONICAS, 1)} h · 65 % (plataforma)", "noche")
 with c[3]:
-    estilo.kpi("Avance hacia la culminación", ui.pct(min(1, form["horas_validas"].mean() / C.HORAS_CULMINACION)),
+    estilo.kpi("Avance hacia la aprobación", ui.pct(min(1, form["horas_validas"].mean() / C.HORAS_CULMINACION)),
                "promedio de horas válidas ÷ 63 h", "naranja")
 
 st.write("")
@@ -43,9 +43,9 @@ with izq:
     st.subheader("Horas promedio por grupo")
     g = form.groupby("grupo", as_index=False)[["horas_sinc_val", "horas_asinc_val"]].mean().sort_values("grupo")
     g = g.melt(id_vars="grupo", var_name="tipo", value_name="horas")
-    g["tipo"] = g["tipo"].map({"horas_sinc_val": "Sincrónicas", "horas_asinc_val": "Asincrónicas"})
+    g["tipo"] = g["tipo"].map({"horas_sinc_val": C.ETQ_SINC, "horas_asinc_val": C.ETQ_ASINC})
     fig = px.bar(g, x="horas", y="grupo", color="tipo", orientation="h",
-                 color_discrete_map={"Sincrónicas": ui.NOCHE, "Asincrónicas": ui.CELESTE},
+                 color_discrete_map={C.ETQ_SINC: ui.NOCHE, C.ETQ_ASINC: ui.CELESTE},
                  labels={"horas": "Horas promedio", "grupo": "", "tipo": ""})
     fig.update_layout(barmode="stack", legend=dict(orientation="h", y=1.08))
     ui.grafica_atenea(fig, max(320, 22 * form["grupo"].nunique()))

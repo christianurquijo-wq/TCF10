@@ -2,6 +2,7 @@
 import pandas as pd
 
 from tcf10 import base_atenea as B
+from tcf10 import config as C
 from tcf10 import metrics as M
 
 ENC = ["No.", "COHORTE", "ID_PERSONA", "RESULTADO", "TIPO_DOCUMENTO", "NUMERO_DOCUMENTO", "PRIMER_NOMBRE",
@@ -55,7 +56,7 @@ def test_calendario_desde_grupos_sis_y_riesgo_sin_usuario():
                                       fecha_fin=coh["fecha_fin"].fillna(pd.Timestamp("2027-02-20"))),
                     pd.Timestamp("2026-11-18"))
     luis = df[(df["id_sis"] < 0) & df["enrolado"]].iloc[0]
-    assert luis["riesgo"] == "Alto" and "sin usuario" in M.motivo_riesgo(luis)
+    assert luis["riesgo"] == C.INACTIVO and "sin usuario" in M.motivo_riesgo(luis)
     assert any("no tienen usuario en el SIS" in a for a in M.alertas_equipo(df))
 
 

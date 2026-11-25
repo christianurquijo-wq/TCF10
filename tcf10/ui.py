@@ -17,9 +17,22 @@ from tcf10 import data, metrics
 NOCHE, AZUL_PROFUNDO, AZUL, CELESTE, NARANJA_CLARO, NARANJA = (
     "#141439", "#05247D", "#2051A0", "#B7D9E6", "#EF6F18", "#E55B0E")
 VERDE, AMARILLO, ROJO, GRIS = "#2E8B57", "#EF6F18", "#C8102E", "#8A8FA8"  # semáforos
-COLOR_RIESGO = {"Alto": ROJO, "Medio": NARANJA_CLARO, "Bajo": AZUL, "Culminó": NOCHE, "Retirado": GRIS,
-                "No culminó": "#5B5F7A", "Sin iniciar": CELESTE, "Sin enrolar": "#DCE3EA"}
-ORDEN_RIESGO = ["Culminó", "Bajo", "Medio", "Alto", "No culminó", "Retirado", "Sin iniciar", "Sin enrolar"]
+COLOR_RIESGO = {  # estados del participante (cuadro Kuepa EduTech, nov-2026)
+    C.EN_FORMACION: AZUL, C.EN_SEGUIMIENTO: "#6FA6C6", C.RIESGO_BAJO: NARANJA_CLARO, C.RIESGO_ALTO: ROJO,
+    C.INACTIVO: "#5B5F7A", C.APROBADO: NOCHE, C.NO_APROBADO: "#B5460A", C.ABANDONO: GRIS,
+    C.POR_INICIAR: CELESTE, C.NO_FORMALIZADO: "#DCE3EA"}
+ORDEN_RIESGO = C.ORDEN_ESTADOS
+
+
+def texto_sobre(fondo: str) -> str:
+    """Blanco o azul noche, el que tenga más contraste sobre `fondo` (#RRGGBB)."""
+    try:
+        r, g, b = (int(fondo.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    except ValueError:
+        return "#FFFFFF"
+    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in (r, g, b)]
+    lum = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    return "#141439" if (lum + 0.05) / (0.0080 + 0.05) > 1.05 / (lum + 0.05) else "#FFFFFF"
 COLOR_ESTADO = {"Cumplido": VERDE, "En curso": AZUL, "No cumplido": ROJO, "Sin datos": GRIS}
 TZ = timezone(timedelta(hours=-5))
 HOY_DEMO = pd.Timestamp("2026-11-13")  # fecha con la que se generaron los datos de demostración
@@ -267,7 +280,7 @@ def refrescar() -> None:
 def filtros(df: pd.DataFrame, clave: str, columnas=("cohorte", "perfil", "nivel")) -> pd.DataFrame:
     cols = st.columns(len(columnas))
     etiquetas = {"cohorte": "Cohorte", "perfil": "Perfil", "nivel": "Nivel", "docente": "Docente",
-                 "grupo": "Grupo", "riesgo": "Riesgo", "poblacion": "Población", "franja": "Franja"}
+                 "grupo": "Grupo", "riesgo": "Estado", "poblacion": "Población", "franja": "Franja"}
     for col, c in zip(cols, columnas):
         opciones = sorted(df[c].dropna().astype(str).unique())
         elegido = col.multiselect(etiquetas.get(c, c), opciones, key=f"{clave}_{c}", placeholder="Todos")
@@ -462,7 +475,7 @@ def barra_filtros(df: pd.DataFrame, pagina: str, columnas=("cohorte", "perfil", 
 
 
 # ------------------------------------------------------------------ gráficas que filtran (vista interna)
-ETIQUETAS_FILTRO = {"grupo": "Grupo", "riesgo": "Riesgo", "cohorte": "Cohorte", "tipo_ruta": "Ruta al 70 %",
+ETIQUETAS_FILTRO = {"grupo": "Grupo", "riesgo": "Estado", "cohorte": "Cohorte", "tipo_ruta": "Ruta al 70 %",
                     "curso": "Curso", "periodo": "Fecha", "docente": "Docente", "franja": "Franja",
                     "feedbacks_hechos": "Feedbacks completados", "estado_feedback": "Estado de Feedbacks"}
 
@@ -592,3 +605,24 @@ def tabla_programa_nivel(t: pd.DataFrame) -> str:
     salida += [f for f in filas if "class='tot'" in f]
     return (css + "<table class='tpn'><thead><tr><th>Programa / nivel</th><th class='n'>Grupos</th>"
             "<th class='n'>Participantes</th></tr></thead><tbody>" + "".join(salida) + "</tbody></table>")
+
+
+def tablas_parametros() -> None:
+    """Cuadro de parámetros de formación de Kuepa EduTech (modalidades, estados de formación y estado final)."""
+    a, b, c = st.columns([1, 1.15, 1.15], gap="medium")
+    a.markdown("**Modalidad de formación**")
+    a.dataframe(pd.DataFrame({
+        "Modalidad": [C.ETQ_SINC, C.ETQ_ASINC, "Total"],
+        "Horas": [num(C.HORAS_SINCRONICAS, 1), num(C.HORAS_ASINCRONICAS, 1), num(C.HORAS_TOTALES)],
+        "Peso": [pct(C.HORAS_SINCRONICAS / C.HORAS_TOTALES), pct(C.HORAS_ASINCRONICAS / C.HORAS_TOTALES), "100 %"]}),
+        hide_index=True, width="stretch")
+    b.markdown("**Estado de formación** (grupo en curso)")
+    filas = []
+    for i, (e, minimo) in enumerate(C.ESTADOS_FORMACION):
+        maximo = C.ESTADOS_FORMACION[i - 1][1] if i else 1.0
+        filas.append({"Estado": e, "Mínimo (>=)": pct(minimo), "Máximo (<)": pct(maximo)})
+    b.dataframe(pd.DataFrame(filas), hide_index=True, width="stretch")
+    c.markdown("**Estado final**")
+    c.dataframe(pd.DataFrame({"Estado": C.ESTADOS_FINALES,
+                              "Concepto": [C.CONCEPTO_FINAL[e] for e in C.ESTADOS_FINALES]}),
+                hide_index=True, width="stretch")

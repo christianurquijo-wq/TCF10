@@ -48,10 +48,10 @@ crit = en_curso[en_curso["critico"]]
 fb_crit = en_curso["critico_feedback"] if "critico_feedback" in en_curso else pd.Series(False, index=en_curso.index)
 c = st.columns(5)
 with c[0]:
-    ui.tarjeta("En formación", ui.num(len(en_curso)), "grupos en curso, sin culminar", ui.AZUL)
+    ui.tarjeta("En curso", ui.num(len(en_curso)), "grupos en curso, sin aprobar aún", ui.AZUL)
 with c[1]:
     ui.tarjeta("Casos críticos", ui.num(len(crit)),
-               f"{ui.pct(len(crit) / len(en_curso) if len(en_curso) else None, 1)} de quienes están en formación", ui.ROJO)
+               f"{ui.pct(len(crit) / len(en_curso) if len(en_curso) else None, 1)} de quienes están en curso", ui.ROJO)
 with c[2]:
     ui.tarjeta("Sin uso de plataforma", ui.num(int(en_curso["sin_plataforma"].sum())),
                f"0 h o {C.DIAS_SIN_PLATAFORMA}+ días sin entrar", ui.NARANJA)

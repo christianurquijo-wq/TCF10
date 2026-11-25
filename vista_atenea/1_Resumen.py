@@ -14,27 +14,41 @@ df = comun.filtrado(completo)
 comun.nota_filtros()
 
 form = df[df["enrolado"]]
-culminaron = int(df["estado_atenea"].eq("Culminó").sum())
-desistieron = int(df["estado_atenea"].eq("Desistió").sum())
-# «En formación» = formalizados que no han culminado ni desistido, para que las tarjetas sumen los formalizados.
-# Incluye a quienes aún no inician su grupo (la nota lo detalla).
-en_formacion = len(form) - culminaron - desistieron
-otros = {e: int(form["estado_atenea"].eq(e).sum()) for e in ("Por iniciar",)}
-detalle = " · ".join(f"{ui.num(n)} {e.lower()}" for e, n in otros.items() if n)
-nota_formacion = "formalizados que aún no culminan" + (f" · incluye {detalle}" if detalle else "")
-asis = comun.asistencia_personas(form)
+cuenta = form["estado_atenea"].value_counts()
+en_curso = int(cuenta.reindex(C.EN_CURSO, fill_value=0).sum())
+por_iniciar = int(cuenta.get(C.POR_INICIAR, 0))
+aprobados, no_aprobados, abandono = (int(cuenta.get(e, 0)) for e in C.ESTADOS_FINALES)
 c = estilo.fila(5, "resumen")
 with c[0]:
     estilo.kpi("Base entregada", ui.num(len(df)), "personas en la base de Formalización", "noche")
 with c[1]:
     estilo.kpi("Formalizados", ui.num(len(form)), f"frente a {ui.num(C.CUPOS_CONTRATADOS)} cupos del contrato", "azul")
 with c[2]:
-    estilo.kpi("En formación", ui.num(en_formacion), nota_formacion, "profundo")
+    estilo.kpi("En curso", ui.num(en_curso), "en alguno de los 5 estados de formación"
+               + (f" · {ui.num(por_iniciar)} por iniciar" if por_iniciar else ""), "profundo")
 with c[3]:
-    estilo.kpi("Culminaron", ui.num(culminaron), f"≥ {ui.num(C.HORAS_CULMINACION)} h válidas (70 % de 90 h)", "naranja")
+    estilo.kpi(C.APROBADO, ui.num(aprobados), f"superan el 70 % ({ui.num(C.HORAS_CULMINACION)} h válidas de 90 h)",
+               "naranja")
 with c[4]:
-    estilo.kpi("Desistieron", ui.num(desistieron),
-               f"{ui.pct(desistieron / len(form) if len(form) else None, 1)} de los formalizados", "celeste")
+    estilo.kpi(C.ABANDONO, ui.num(abandono),
+               f"{ui.pct(abandono / len(form) if len(form) else None, 1)} de los formalizados · "
+               f"{ui.num(no_aprobados)} {C.NO_APROBADO.lower()}", "celeste")
+
+st.write("")
+estilo.seccion("Estado de formación")
+st.caption("Participantes con su grupo en curso, según su avance frente a las horas que deberían llevar a hoy "
+           "según el calendario del grupo. Responde a los filtros de arriba.")
+izq, der = st.columns([1.25, 1], gap="large")
+tot = max(1, en_curso)
+izq.dataframe(pd.DataFrame({
+    "Estado formación": C.EN_CURSO,
+    "Avance frente al esperado": [C.rango_estado(e) for e in C.EN_CURSO],
+    "Participantes": [ui.num(int(cuenta.get(e, 0))) for e in C.EN_CURSO],
+    "%": [ui.pct(int(cuenta.get(e, 0)) / tot, 1) for e in C.EN_CURSO]}), hide_index=True, width="stretch")
+der.dataframe(pd.DataFrame({
+    "Estado final": C.ESTADOS_FINALES,
+    "Concepto": [C.CONCEPTO_FINAL[e] for e in C.ESTADOS_FINALES],
+    "Participantes": [ui.num(int(cuenta.get(e, 0))) for e in C.ESTADOS_FINALES]}), hide_index=True, width="stretch")
 
 st.write("")
 estilo.seccion("Participantes por programa y nivel")
@@ -86,15 +100,14 @@ for coh, tot in totales.items():
 ui.grafica_atenea(fig, 400)
 
 # Tabla: cada formalizado está en un solo estado, así que las columnas de estado suman «Formalizados».
-estados = [e for e in ["En formación", "Por iniciar", "Culminó", "Desistió"]
-           if df["estado_atenea"].eq(e).any() or e in ("En formación", "Culminó", "Desistió")]
+estados = [e for e in C.ORDEN_ESTADOS if e != C.NO_FORMALIZADO and (df["estado_atenea"].eq(e).any()
+                                                                   or e in C.ESTADOS_FINALES)]
 t = (df.assign(asistencia=comun.asistencia_personas(df))
        .groupby("cohorte").agg(base=("id_sis", "size"), formalizados=("enrolado", "sum"),
                                horas=("horas_validas", "mean"), asistencia=("asistencia", "mean")))
 conteo = pd.crosstab(df["cohorte"], df["estado_atenea"]).reindex(columns=estados, fill_value=0)
 t = t.join(conteo).reset_index()
-nombres = {"En formación": "En formación", "Por iniciar": "Por iniciar", "Culminó": "Culminaron",
-           "Desistió": "Desistieron"}
+nombres = {e: e for e in estados}
 tabla = pd.DataFrame({"Cohorte": t["cohorte"], "Base": t["base"].map(ui.num),
                       "Formalizados": t["formalizados"].map(ui.num)})
 for e in estados:

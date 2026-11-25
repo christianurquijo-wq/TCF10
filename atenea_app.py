@@ -6,9 +6,10 @@ Talento Capital Formación 10 · app unificada (nov-2026).
 Una sola app con dos vistas:
   * Vista Atenea (por defecto): navegación superior, banda institucional con filtros; nombre y documento de los
     participantes, sin montos ni riesgo. Ingreso con usuario/contraseña ([atenea.usuarios]) o Google.
-  * Vista interna (Kuepa): metas y pagos, avance y riesgo, cohortes y equipo, asistencia y plataforma, grupos y
+  * Vista interna (Kuepa): metas y pagos, avance y estado de formación, cohortes y equipo, asistencia y plataforma, grupos y
     casos críticos (con la tipificación por estudiante), consulta por participante y metodología.
-    Solo la ven los correos de Google listados en [atenea] internos: para ellos aparece el botón «Vista interna».
+    Solo la ven los correos de Google listados en [atenea] internos: para ellos el sello «Operado por Kuepa» de la
+    banda es un enlace a la vista interna (para el resto es solo el sello; no hay botón visible).
 """
 import streamlit as st
 
@@ -37,7 +38,7 @@ PAGINAS_INTERNAS = [
             default=True, url_path="interno-criticos"),
     st.Page("tablero/7_Feedbacks.py", title="Feedbacks", icon=":material/rate_review:", url_path="interno-feedbacks"),
     st.Page("tablero/1_Metas_y_pagos.py", title="Metas y pagos", icon=":material/payments:", url_path="interno-metas"),
-    st.Page("tablero/2_Avance_y_riesgo.py", title="Avance y riesgo", icon=":material/monitoring:",
+    st.Page("tablero/2_Avance_y_riesgo.py", title="Avance y estado", icon=":material/monitoring:",
             url_path="interno-avance"),
     st.Page("tablero/3_Cohortes_y_equipo.py", title="Cohortes y equipo", icon=":material/groups:",
             url_path="interno-cohortes"),
@@ -61,6 +62,14 @@ if sesion:
 interno_ok = acceso.es_interno(sesion)
 st.session_state["interno_ok"] = interno_ok
 st.session_state["interno_correo"] = (sesion or {}).get("nombre", "")
+# El sello «Operado por Kuepa» enlaza a ?vista=interna (solo se dibuja como enlace para los autorizados; si otra
+# persona escribe el parámetro a mano, se ignora).
+_pedida = st.query_params.get("vista")
+if _pedida in ("interna", "atenea"):
+    if _pedida == "atenea" or interno_ok:
+        st.session_state["vista"] = _pedida
+        st.session_state["ir_inicio"] = True
+    del st.query_params["vista"]
 if not interno_ok:
     st.session_state["vista"] = "atenea"  # quien no está autorizado nunca queda en la vista interna
 interna = st.session_state.get("vista") == "interna"
@@ -84,7 +93,8 @@ def cambiar_vista(destino: str) -> None:
 if interna:
     # Banda de la vista interna: sin filtros globales (cada página interna trae los suyos)
     with st.container(key="banda"):
-        st.markdown(estilo.banda_html(f"{comun.hoy():%d/%m/%Y}", interna=True), unsafe_allow_html=True)
+        st.markdown(estilo.banda_html(f"{comun.hoy():%d/%m/%Y}", interna=True, enlace="?vista=atenea"),
+                    unsafe_allow_html=True)
         pie = st.columns([3, 1.2, 1, 1])
         pie[0].caption(f"Vista interna Kuepa · {correo}" if correo else "Vista interna Kuepa")
         pie[1].button("Vista Atenea", icon=":material/visibility:", on_click=cambiar_vista, args=("atenea",),
@@ -98,22 +108,18 @@ if interna:
 else:
     # Banda institucional con los filtros globales (aplican a todas las páginas de la vista Atenea)
     with st.container(key="banda"):
-        st.markdown(estilo.banda_html(f"{comun.hoy():%d/%m/%Y}"), unsafe_allow_html=True)
+        st.markdown(estilo.banda_html(f"{comun.hoy():%d/%m/%Y}", enlace="?vista=interna" if interno_ok else None),
+                    unsafe_allow_html=True)
         comun.filtros_banda(comun.todos())
-        pie = st.columns([3, 1.2, 1, 1]) if interno_ok else st.columns([4, 1, 1])
+        pie = st.columns([4, 1, 1])
         if correo:
             pie[0].caption(f"Sesión: {correo}")
-        i = 1
-        if interno_ok:
-            pie[1].button("Vista interna", icon=":material/admin_panel_settings:", on_click=cambiar_vista,
-                          args=("interna",), width="stretch", type="primary")
-            i = 2
-        if pie[i].button("Actualizar", icon=":material/refresh:", width="stretch"):
+        if pie[1].button("Actualizar", icon=":material/refresh:", width="stretch"):
             ui.refrescar()
             st.rerun()
         if correo:
-            pie[i + 1].button("Salir", icon=":material/logout:", on_click=acceso.cerrar_sesion, args=(sesion,),
-                              width="stretch")
+            pie[2].button("Salir", icon=":material/logout:", on_click=acceso.cerrar_sesion, args=(sesion,),
+                          width="stretch")
 
 nav.run()
 

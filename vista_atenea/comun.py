@@ -12,9 +12,8 @@ from tcf10 import data
 from tcf10 import ui
 
 FILTROS = [("cohorte", "Cohorte"), ("perfil", "Programa"), ("nivel", "Nivel"), ("grupo", "Grupo"), ("franja", "Franja")]
-ORDEN_ESTADO = ["En formación", "Culminó", "Por iniciar", "Desistió", "No formalizado"]
-COLOR_ESTADO = {"En formación": ui.AZUL, "Culminó": ui.NOCHE, "Por iniciar": ui.CELESTE,
-                "Desistió": ui.GRIS, "No formalizado": "#DCE3EA"}
+ORDEN_ESTADO = C.ORDEN_ESTADOS          # estados del cuadro Kuepa EduTech (nov-2026), iguales en la vista interna
+COLOR_ESTADO = ui.COLOR_RIESGO
 
 
 def hoy() -> pd.Timestamp:
@@ -41,17 +40,8 @@ def todos() -> pd.DataFrame:
 
 
 def estado(f: pd.Series) -> str:
-    if f["estado"] == "No formalizado" or not f["enrolado"]:
-        return "No formalizado"
-    if f["retirado"]:
-        return "Desistió"
-    if f.get("en_sis") in (False,):  # formalizado aún sin usuario en la plataforma: se reporta en formación
-        return "En formación"
-    if f["culmino"]:
-        return "Culminó"
-    if not f["cohorte_iniciada"]:
-        return "Por iniciar"
-    return "En formación"
+    """Mismo estado que la vista interna: 5 estados de formación (grupo en curso) o estado final."""
+    return f["riesgo"]
 
 
 def filtros_banda(df: pd.DataFrame) -> None:

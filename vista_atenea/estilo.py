@@ -30,6 +30,8 @@ CSS = """
 /* Las tablas no se descargan desde su barra: la única descarga es el Excel con marca de agua y registro */
 button[aria-label^="Download as CSV"], [data-testid="stElementToolbarButton"]:has(button[aria-label^="Download"]) {
     display:none !important;}
+.sello-enlace {display:inline-block; border-radius:10px; text-decoration:none !important; transition:box-shadow .15s;}
+.sello-enlace:hover, .sello-enlace:focus-visible {box-shadow:0 0 0 3px #EF6F18;}
 .pie-legal {border-top:1px solid #D3E7EF; margin-top:28px; padding-top:10px; color:#4A4F78; font-size:.85rem;}
 .pie-legal a {color:#2051A0;}
 .block-container {padding-top: 3.2rem; max-width: 1320px;}
@@ -107,7 +109,14 @@ def css() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
 
 
-def banda_html(fecha: str, interna: bool = False) -> str:
+def banda_html(fecha: str, interna: bool = False, enlace: str | None = None) -> str:
+    """Banda institucional. Con `enlace`, el sello «Operado por Kuepa» es un enlace (cambio de vista, solo para los
+    correos autorizados); sin él es solo el sello."""
+    sello = ui.chip_kuepa()
+    if enlace:
+        destino = "la vista Atenea" if interna else "la vista interna de Kuepa"
+        sello = (f"<a class='sello-enlace' href='{html.escape(enlace)}' target='_self' title='Ir a {destino}' "
+                 f"aria-label='Operado por Kuepa: ir a {destino}'>{sello}</a>")
     ceja = ("<span class='banda-interna'>Vista interna</span> Gestión del contrato · Kuepa EduTech" if interna
             else "Informe de seguimiento · Operador Kuepa EduTech")
     return (f"<div style='display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap'>"
@@ -115,7 +124,7 @@ def banda_html(fecha: str, interna: bool = False) -> str:
             f"<div class='banda-titulo'>Talento Capital · Formación 10</div>"
             f"<div class='banda-bajada'>Contrato ATENEA-497-2026 · Formación en Marketing digital y finanzas, y "
             f"Auxiliar de información y servicio al cliente, con enfoque en Inteligencia Artificial</div></div>"
-            f"<div class='banda-lado'>{ui.chip_kuepa()}<div class='banda-fecha'>Datos al {html.escape(fecha)}</div>"
+            f"<div class='banda-lado'>{sello}<div class='banda-fecha'>Datos al {html.escape(fecha)}</div>"
             f"</div></div>")
 
 

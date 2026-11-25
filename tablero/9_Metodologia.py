@@ -6,12 +6,13 @@ from tcf10 import config as C
 from tcf10 import ui
 
 ui.inicio("Cómo se calcula", "Definiciones del contrato y supuestos del tablero")
+ui.tablas_parametros()
 
 st.markdown(f"""
-**Formación.** {ui.num(C.HORAS_TOTALES)} h por perfil: {ui.num(C.HORAS_SINCRONICAS, 1)} h sincrónicas (asistencia a
-sesiones con docente) y {ui.num(C.HORAS_ASINCRONICAS, 1)} h asincrónicas (plataforma). Cada componente cuenta hasta
-su tope: horas de más en uno no compensan el otro. **Culmina** quien llega al {ui.pct(C.UMBRAL_CULMINACION)}:
-**{ui.num(C.HORAS_CULMINACION)} h válidas**.
+**Formación.** {ui.num(C.HORAS_TOTALES)} h por perfil: {ui.num(C.HORAS_SINCRONICAS, 1)} h de {C.ETQ_SINC.lower()}
+(35 %, sesiones con docente) y {ui.num(C.HORAS_ASINCRONICAS, 1)} h de {C.ETQ_ASINC.lower()} (65 %, plataforma). Cada
+componente cuenta hasta su tope: horas de más en uno no compensan el otro. **Aprueba** quien supera el
+{ui.pct(C.UMBRAL_CULMINACION)}: **{ui.num(C.HORAS_CULMINACION)} h válidas**.
 
 **Fuente del avance.** Vistas VTD10 del SIS (BigQuery o su copia en Google Sheets), cruzadas por ID SIS: sincrónicas = sesiones pasadas con
 asistencia × 4 h por sesión; asincrónicas = Horas_Plataforma_Acreditadas: tiempo pedagógico acreditado
@@ -19,18 +20,17 @@ asistencia × 4 h por sesión; asincrónicas = Horas_Plataforma_Acreditadas: tie
 component_category = "resource" e is_completed = TRUE, igual que en Looker Studio) sumado por persona; cuenta hasta 58,5 h. Se excluyen los usuarios de prueba. La base de beneficiarios, grupos, docentes, retiros,
 certificación y situación laboral sale del Google Sheet operativo.
 
-**Riesgo (Anexo 8).** Se compara el avance con el esperado a la fecha según el calendario de la cohorte
-(90 h × días transcurridos ÷ duración):
-- **Alto:** ritmo menor a {ui.pct(C.RIESGO['alto']['ritmo_menor_a'])} del esperado o
-  {C.RIESGO['alto']['dias_sin_actividad']} días o más sin actividad.
-- **Medio:** ritmo menor a {ui.pct(C.RIESGO['medio']['ritmo_menor_a'])} o {C.RIESGO['medio']['dias_sin_actividad']}
-  días o más sin actividad.
-- **Bajo:** el resto. El ritmo se evalúa cuando ya se esperaban {ui.num(C.RIESGO_MIN_ESPERADO_H)} h y la inactividad
-  después de {C.RIESGO_GRACIA_DIAS} días de iniciada la cohorte, para no alertar en falso la primera semana.
+**Estados del participante** (cuadro de parámetros de Kuepa EduTech, nov-2026):
+- **Estado de formación** (grupo en curso y aún sin el 70 %): % de avance = horas válidas ÷ horas esperadas a hoy
+  según el calendario de su grupo (90 h × días transcurridos ÷ duración). Mientras se esperan menos de
+  {ui.num(C.RIESGO_MIN_ESPERADO_H)} h (primeras semanas), el ritmo de horas no es representativo y se usa la
+  asistencia: sesiones asistidas ÷ registradas (con al menos {C.RIESGO_MIN_SESIONES} sesiones; antes de eso queda
+  en *{C.EN_FORMACION}*). Formalizado sin usuario en el SIS = *{C.INACTIVO}*.
+- **{C.APROBADO}:** apenas supera el 70 % ({ui.num(C.HORAS_CULMINACION)} h válidas).
+- **Al cerrar su grupo** sin llegar al 70 %: *{C.NO_APROBADO}*; si no registró ninguna hora, *{C.ABANDONO}*.
+  Quien se retira: *{C.ABANDONO}* (voluntaria) en cualquier momento.
+- Además: *{C.POR_INICIAR}* (su grupo no ha empezado) y *{C.NO_FORMALIZADO}*.
 
-**Primeras dos semanas de cada grupo:** el ritmo de horas todavía no es representativo, así que manda la asistencia. Con al menos 2 sesiones registradas: **alto** si no asistió a ninguna y no tiene avance en la plataforma; **medio** si asistió a menos de la mitad.
-
-Los umbrales son una propuesta inicial: se validan con Atenea y el coordinador académico.
 """)
 
 st.subheader("Pagos e índices")
@@ -50,7 +50,7 @@ st.markdown("""
   participación en 1 a 3 convocatorias futuras.
 - **Tránsito al mercado laboral:** solo convocatoria abierta, encuesta de empleabilidad al inicio y PILA en t3
   (tres meses después de terminar). No cuentan los contratos de aprendizaje.
-- **Proyección del pago 2:** culminados + activos × probabilidad de culminar según su riesgo
+- **Proyección del pago 2:** aprobados + personas en curso × probabilidad de aprobar según su estado de formación
   (supuesto ajustable en `tcf10/config.py`).
 """)
 
