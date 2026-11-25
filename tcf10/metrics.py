@@ -16,7 +16,7 @@ from tcf10 import config as C
 NIVELES_RIESGO = C.EN_CURSO
 # Cambia cuando cambian las columnas que calcula preparar(): forma parte de la llave del caché de ui._preparado, así
 # un despliegue nuevo no reutiliza tablas viejas (nov-2026: «KeyError: 'critico'» tras agregar la tipificación).
-VERSION = "2026-11-25 icp"
+VERSION = "2026-11-26 caracterizacion"
 
 
 def _n(x) -> str:

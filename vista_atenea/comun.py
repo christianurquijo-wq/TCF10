@@ -117,8 +117,17 @@ def seccion_caracterizacion(df: pd.DataFrame) -> None:
     import plotly.express as px
     form = df[df["enrolado"]].copy()
     dims = [c for c in C.CARACTERIZACION if c in form]
-    if form.empty or not dims:
-        st.info("Sin información de caracterización para este filtro.")
+    if form.empty:
+        st.info("No hay formalizados para este filtro.")
+        return
+    vacias = [c for c in dims if form[c].astype(str).eq(C.SIN_INFO).all()]
+    if not dims or len(vacias) == len(dims):
+        from tcf10 import base_atenea
+        diag = base_atenea.DIAGNOSTICO_CARACT
+        detalle = (" · ".join(f"{C.CARACTERIZACION[k]}: {v or 'no encontrada'}" for k, v in diag.items())
+                   if diag else "la base todavía no se ha releído con esta versión")
+        st.warning("La base cargada no trae datos de caracterización. Pulsa **Actualizar** en la banda para releer "
+                   f"la base de Formalización. Columnas detectadas → {detalle}.", icon=":material/info:")
         return
     dim = st.pills("Ver por", dims, format_func=C.CARACTERIZACION.get, default=dims[0], key="at_caract_dim") or dims[0]
     sensible = dim in C.CARACT_SENSIBLES
