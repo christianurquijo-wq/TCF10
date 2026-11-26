@@ -1,5 +1,4 @@
 """Progreso: horas completadas frente a la meta de 63 h y avance en los cursos de la plataforma."""
-import plotly.graph_objects as go
 import streamlit as st
 
 from tcf10 import config as C
@@ -29,12 +28,8 @@ with c[3]:
                "promedio de horas completadas ÷ 63 h", "naranja")
 
 st.write("")
-estilo.seccion("Distribución de horas completadas")
-fig = go.Figure(go.Histogram(x=form["horas_validas"], xbins=dict(start=0, end=90, size=3), marker_color=ui.AZUL))
-fig.add_vline(x=C.HORAS_CULMINACION, line_dash="dash", line_color=ui.NARANJA,
-              annotation_text=f"Meta {ui.num(C.HORAS_CULMINACION)} h")
-fig.update_layout(xaxis_title="Horas completadas", yaxis_title="Participantes", bargap=.05)
-ui.grafica_atenea(fig, 320)
+estilo.seccion("Personas según sus horas completadas")
+graficas.personas_por_horas(form)
 
 _, prog = comun.agregados_asistencia(df)
 izq, der = st.columns([1.15, 1], gap="large")

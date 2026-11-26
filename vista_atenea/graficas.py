@@ -165,3 +165,63 @@ def avance_cursos(prog: pd.DataFrame) -> None:
     st.caption("Cada barra suma 100 % de las inscripciones a ese curso en la plataforma. «Completado» es el curso "
                "terminado; el % solo se escribe cuando el tramo es de 7 % o más (el resto, al pasar el cursor o en "
                "«Ver datos»).")
+
+
+# ------------------------------------------------------------------ participantes por horas completadas
+def tramos_horas() -> list[tuple[str, float, float]]:
+    """(etiqueta, desde, hasta) en horas completadas. Tramos de 15 h hasta la meta de aprobación (63 h)."""
+    meta = C.HORAS_CULMINACION
+    return [("Sin horas", -1.0, 0.0), ("Hasta 15 h", 0.0, 15.0), ("15 a 30 h", 15.0, 30.0),
+            ("30 a 45 h", 30.0, 45.0), (f"45 a {ui.num(meta)} h", 45.0, meta - 1e-9),
+            (f"{ui.num(meta)} h o más", meta - 1e-9, C.HORAS_TOTALES + 1)]
+
+
+def datos_tramos(form: pd.DataFrame) -> pd.DataFrame:
+    """Personas en formación por tramo de horas completadas (cada persona en un solo tramo)."""
+    h = pd.to_numeric(form["horas_validas"], errors="coerce").fillna(0)
+    filas = []
+    for etiqueta, desde, hasta in tramos_horas():
+        n = int(((h > desde) & (h <= hasta)).sum())
+        filas.append({"tramo": etiqueta, "personas": n})
+    t = pd.DataFrame(filas)
+    t["pct"] = t["personas"] / max(1, len(h))
+    return t
+
+
+def personas_por_horas(form: pd.DataFrame) -> None:
+    t = datos_tramos(form)
+    total = int(t["personas"].sum())
+    aprobados = int(t["personas"].iloc[-1])
+    sin_horas = int(t["personas"].iloc[0])
+    meta = ui.num(C.HORAS_CULMINACION)
+    st.markdown(f"**{ui.num(aprobados)} de {ui.num(total)} personas** ({ui.pct(aprobados / total if total else None, 1)}) "
+                f"ya completaron {meta} h o más y quedan como {C.APROBADO}. "
+                f"**{ui.num(sin_horas)}** aún no registran horas completadas.")
+    # Un color para quienes aún no llegan a la meta, el de «Aprobado Operador» para los que la superan y celeste
+    # para «Sin horas» (el color acompaña a la etiqueta del eje; no es la única forma de distinguirlos).
+    colores = [ui.CELESTE] + [ui.AZUL] * (len(t) - 2) + [ui.NOCHE]
+    fig = go.Figure(go.Bar(
+        x=t["tramo"], y=t["personas"], marker_color=colores,
+        text=[f"<b>{ui.num(n)}</b><br>{ui.pct(p, 1)}" for n, p in zip(t["personas"], t["pct"])],
+        textposition="outside", textfont=dict(size=13, color=ui.NOCHE), cliponaxis=False,
+        customdata=t["pct"],
+        hovertemplate="<b>%{x}</b><br>%{y:,} personas (%{customdata:.1%})<extra></extra>"))
+    # Separador visual entre «aún no aprueban» y «aprueban»
+    fig.add_vline(x=len(t) - 1.5, line_dash="dash", line_color=ui.NOCHE, line_width=1.5)
+    fig.add_annotation(x=len(t) - 1.5, y=1.0, yref="paper", yanchor="bottom", xanchor="right", xshift=-6,
+                       text="← Aún no alcanzan la meta", showarrow=False, font=dict(size=12, color=ui.NOCHE))
+    fig.add_annotation(x=len(t) - 1.5, y=1.0, yref="paper", yanchor="bottom", xanchor="left", xshift=6,
+                       text=f"Alcanzan la meta de {meta} h (70 %) →", showarrow=False, font=dict(size=12, color=ui.NOCHE))
+    alto = 340
+    ui.dark_layout(fig, alto)
+    fig.update_layout(separators=",.", bargap=0.28, showlegend=False, margin=dict(t=44, b=10, l=10, r=10))
+    fig.update_xaxes(title=dict(text="Horas completadas (de 90 h del curso)", font=dict(size=13)),
+                     tickfont=dict(size=13), fixedrange=True, showgrid=False)
+    fig.update_yaxes(title=None, showticklabels=False, showgrid=False, range=[0, t["personas"].max() * 1.25 or 1],
+                     fixedrange=True)
+    tabla = pd.DataFrame({"Horas completadas": t["tramo"], "Personas": t["personas"],
+                          "% de personas en formación": (t["pct"] * 100).round(1)})
+    ui.grafica_atenea(fig, alto, tabla=tabla, estilo_base=False)
+    st.caption(f"Personas en formación (grupo en curso, {C.APROBADO} o {C.NO_APROBADO}) según sus horas completadas: "
+               f"{C.ETQ_SINC} (hasta {ui.num(C.HORAS_SINCRONICAS, 1)} h) + {C.ETQ_ASINC} (hasta "
+               f"{ui.num(C.HORAS_ASINCRONICAS, 1)} h). Cada persona está en un solo tramo.")
