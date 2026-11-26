@@ -27,7 +27,9 @@ PAGINAS_ATENEA = [
     st.Page("vista_atenea/3_Progreso.py", title="Progreso", icon=":material/trending_up:", url_path="progreso"),
     st.Page("vista_atenea/4_Participantes.py", title="Participantes", icon=":material/badge:", url_path="participantes"),
     st.Page("vista_atenea/5_Ficha.py", title="Ficha", icon=":material/person_search:", url_path="ficha"),
-    st.Page("vista_atenea/6_Looker.py", title="Tablero Looker", icon=":material/insert_chart:", url_path="looker"),
+    # Oculta temporalmente (nov-2026) mientras se ajusta el Looker a las cifras de la app. Para mostrarla de nuevo,
+    # quita el «#» de la línea siguiente.
+    # st.Page("vista_atenea/6_Looker.py", title="Tablero Looker", icon=":material/insert_chart:", url_path="looker"),
     st.Page("vista_atenea/7_Como_se_calcula.py", title="Cómo se calcula", icon=":material/menu_book:",
             url_path="como-se-calcula"),
     st.Page("vista_atenea/8_Privacidad.py", title="Privacidad y términos", icon=":material/policy:",
