@@ -128,6 +128,9 @@ def tablas(hoy: pd.Timestamp | None = None, permitir_demo: bool = False) -> dict
 
     # ---------------- personas
     ident = data.identidades()
+    # Igual que la app (comun.con_identidad): si la base ya trae alguna de estas columnas, el merge las renombraría
+    # a documento_x / documento_y y la columna «documento» quedaría vacía.
+    df = df.drop(columns=[c for c in ("nombre_completo", "tipo_documento", "documento") if c in df])
     if demo:  # pruebas con datos sintéticos: sin base cruda ni huella
         p = df.merge(ident, on="id_sis", how="left")
     else:

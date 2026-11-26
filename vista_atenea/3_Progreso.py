@@ -1,11 +1,10 @@
 """Progreso: horas completadas frente a la meta de 63 h y avance en los cursos de la plataforma."""
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
 from tcf10 import config as C
 from tcf10 import ui
-from vista_atenea import comun, estilo
+from vista_atenea import comun, estilo, graficas
 
 estilo.pagina("Progreso", f"Horas completadas frente a la meta de {ui.num(C.HORAS_CULMINACION)} h y avance en los cursos")
 df = comun.filtrado(comun.todos())
@@ -38,31 +37,10 @@ fig.update_layout(xaxis_title="Horas completadas", yaxis_title="Participantes", 
 ui.grafica_atenea(fig, 320)
 
 _, prog = comun.agregados_asistencia(df)
-izq, der = st.columns(2)
+izq, der = st.columns([1.15, 1], gap="large")
 with izq:
     st.subheader("Horas promedio por grupo")
-    g = form.groupby("grupo", as_index=False)[["horas_sinc_val", "horas_asinc_val"]].mean().sort_values("grupo")
-    g = g.melt(id_vars="grupo", var_name="tipo", value_name="horas")
-    g["tipo"] = g["tipo"].map({"horas_sinc_val": C.ETQ_SINC, "horas_asinc_val": C.ETQ_ASINC})
-    fig = px.bar(g, x="horas", y="grupo", color="tipo", orientation="h",
-                 color_discrete_map={C.ETQ_SINC: ui.NOCHE, C.ETQ_ASINC: ui.CELESTE},
-                 labels={"horas": "Horas promedio", "grupo": "", "tipo": ""})
-    fig.update_layout(barmode="stack", legend=dict(orientation="h", y=1.08))
-    ui.grafica_atenea(fig, max(320, 22 * form["grupo"].nunique()))
+    graficas.horas_por_grupo(form)
 with der:
     st.subheader("Avance en los cursos")
-    if prog.empty:
-        st.info("Sin avance registrado en la plataforma para este filtro.")
-    else:
-        cur = prog.assign(curso=prog["curso"].map(ui.curso_corto)).groupby("curso", as_index=False)[
-            ["completado", "en_progreso", "sin_iniciar"]].sum()
-        cur = cur.melt(id_vars="curso", var_name="estado", value_name="inscripciones")
-        cur["estado"] = cur["estado"].map({"completado": "Completado", "en_progreso": "En progreso",
-                                           "sin_iniciar": "Sin iniciar"})
-        fig = px.bar(cur, y="curso", x="inscripciones", color="estado", orientation="h",
-                     category_orders={"estado": ["Completado", "En progreso", "Sin iniciar"]},
-                     color_discrete_map={"Completado": ui.NOCHE, "En progreso": ui.AZUL, "Sin iniciar": ui.CELESTE},
-                     labels={"curso": "", "estado": ""})
-        fig.update_layout(barmode="stack", barnorm="percent", xaxis=dict(title="% de inscripciones", ticksuffix=" %"),
-                          legend=dict(orientation="h", y=1.08))
-        ui.grafica_atenea(fig, 60 + 50 * cur["curso"].nunique())
+    graficas.avance_cursos(prog)

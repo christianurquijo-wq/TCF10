@@ -354,15 +354,21 @@ def datos_grafica(fig) -> pd.DataFrame:
     return out
 
 
-def grafica_atenea(fig, height: int = 340, descripcion: str = "") -> None:
+def grafica_atenea(fig, height: int = 340, descripcion: str = "", alto_max: int | None = None,
+                   tabla: pd.DataFrame | None = None, estilo_base: bool = True) -> None:
     """Gráfica de la vista Atenea, accesible: bordes oscuros en barras (contraste ≥ 3:1 aunque el color de relleno
-    sea claro), sin barra de herramientas y con sus datos en texto debajo («Ver datos de la gráfica»)."""
-    fig = dark_layout(fig, height)
+    sea claro), sin barra de herramientas y con sus datos en texto debajo («Ver datos de la gráfica»).
+    alto_max: si la gráfica es más alta, va en una caja con scroll. tabla: datos propios para «Ver datos» (si no,
+    se sacan de las trazas). estilo_base=False: la gráfica ya trae su layout (no se pisa)."""
+    if estilo_base:
+        fig = dark_layout(fig, height)
     fig.update_traces(selector=dict(type="bar"), marker_line_color=NOCHE, marker_line_width=0.6)
     if descripcion:
         st.caption(descripcion)
-    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False, "responsive": True})
-    tabla = datos_grafica(fig)
+    caja = st.container(height=alto_max, border=False) if alto_max and height > alto_max else st.container()
+    with caja:
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False, "responsive": True})
+    tabla = datos_grafica(fig) if tabla is None else tabla
     if not tabla.empty:
         with st.expander("Ver datos de la gráfica", icon=":material/table:"):
             st.dataframe(tabla, hide_index=True, width="stretch", height=min(400, 38 + 35 * len(tabla)))
