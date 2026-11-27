@@ -1,0 +1,86 @@
+# TCF10 · Cortes semanales de la DB Formación (Cohorte 1 y 2), cada domingo a las 11:59 p. m. (hora de Colombia).
+# 1) Guarda la copia congelada «al domingo 11:59 p. m.» de cada cohorte en la carpeta de cortes (scripts/cortes_semanales.py).
+#    Si un domingo anterior quedó sin corte (falla, cron caído), también lo genera: nunca se pierde una semana.
+# 2) Después actualiza la pestaña viva «Seg.Formación» (el cron L-S de db_formacion_cron.yml no corre el domingo).
+# GitHub puede arrancar el cron con minutos de retraso: el corte se calcula como «el domingo más reciente», así que
+# aunque arranque el lunes de madrugada el corte sigue siendo el del domingo.
+# Correr a mano (Actions › este workflow › Run workflow): vacío = todos los que falten (sirve para la reconstrucción
+# inicial); con fecha = solo ese domingo; «forzar» = rehacerlo aunque exista.
+name: TCF10 · Cortes semanales DB Formación (dom 11:59 p. m.)
+
+on:
+  schedule:
+    # GitHub usa hora UTC (Colombia = UTC-5): lunes 04:59 UTC = domingo 11:59 p. m. en Colombia.
+    - cron: "59 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      corte:
+        description: "Domingo del corte (AAAA-MM-DD). Vacío = todos los que falten"
+        required: false
+        default: ""
+      forzar:
+        description: "Rehacer aunque ya exista (el anterior va a la papelera)"
+        type: boolean
+        default: false
+      actualizar_vivo:
+        description: "Actualizar también la pestaña viva Seg.Formación"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ops-scripts/actualizar_db_formacion.py
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cortes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt google-auth requests
+
+      - name: Restaurar archivos secretos
+        env:
+          SECRETS_BUNDLE: ${{ secrets.SECRETS_BUNDLE }}
+        run: |
+          if [ -z "$SECRETS_BUNDLE" ]; then echo "::error::SECRETS_BUNDLE no configurado"; exit 1; fi
+          echo "$SECRETS_BUNDLE" | base64 -d > "$RUNNER_TEMP/s.zip"
+          unzip -oq "$RUNNER_TEMP/s.zip" -d .
+          rm -f "$RUNNER_TEMP/s.zip"
+
+      - name: Cortes semanales con bitácora
+        env:
+          CORTES_FECHA: ${{ github.event.inputs.corte }}
+          CORTES_FORZAR: ${{ github.event.inputs.forzar }}
+          # ID de la carpeta de cortes: variable del repositorio (Settings › Variables) o [db_formacion] carpeta_cortes
+          DB_FORMACION_CARPETA_CORTES: ${{ vars.DB_FORMACION_CARPETA_CORTES }}
+          OPS_ORIGEN: ${{ github.event_name == 'schedule' && 'cron' || 'manual' }}
+          OPS_ACTOR: ${{ github.event_name == 'schedule' && 'github-cron' || github.actor }}
+          OPS_SHEET_ID: ${{ secrets.OPS_SHEET_ID }}
+          OPS_LOG_SA_JSON: ${{ secrets.OPS_LOG_SA_JSON }}
+          OPS_ALERT_WEBHOOK: ${{ secrets.OPS_ALERT_WEBHOOK }}
+          OPS_ALERT_TOKEN: ${{ secrets.OPS_ALERT_TOKEN }}
+        run: python ops_logger.py --script "scripts/cortes_semanales.py" --cwd root --timeout 100
+
+      - name: Actualizar la pestaña viva
+        if: ${{ always() && (github.event_name == 'schedule' || github.event.inputs.actualizar_vivo == 'true') }}
+        env:
+          OPS_ORIGEN: ${{ github.event_name == 'schedule' && 'cron' || 'manual' }}
+          OPS_ACTOR: ${{ github.event_name == 'schedule' && 'github-cron' || github.actor }}
+          OPS_SHEET_ID: ${{ secrets.OPS_SHEET_ID }}
+          OPS_LOG_SA_JSON: ${{ secrets.OPS_LOG_SA_JSON }}
+          OPS_ALERT_WEBHOOK: ${{ secrets.OPS_ALERT_WEBHOOK }}
+          OPS_ALERT_TOKEN: ${{ secrets.OPS_ALERT_TOKEN }}
+        run: python ops_logger.py --script "scripts/actualizar_db_formacion.py" --cwd root --timeout 25

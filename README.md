@@ -52,3 +52,22 @@ páginas internas.
   correo (columnas de la base de Formalización; la ventana muestra de qué columnas salieron) y cada descarga queda en
   el registro de seguridad con el usuario y los filtros.
 - **Discapacidad** (dato sensible): solo en resumen y distribución, con conteos de 1 a 4 como «< 5»; nunca en listas.
+
+## Cortes semanales de la DB Formación (domingo 11:59 p. m.)
+
+Copia completa del archivo de cada cohorte «como si se hubiera generado el domingo a las 11:59 p. m.», con las
+cifras reconstruidas hasta ese día y **todas las pestañas congeladas en valores** (`tcf10/cortes.py`,
+`scripts/cortes_semanales.py`, pruebas en `tests/test_cortes.py`). La pestaña viva «Seg.Formación» no se toca.
+
+- **Cuándo**: `.github/workflows/db_formacion_cortes.yml`, domingo 11:59 p. m. (lunes 04:59 UTC). Luego actualiza la
+  pestaña viva. Genera el domingo que acaba de pasar y cualquier domingo anterior que haya quedado sin corte.
+- **Qué domingos**: desde el primer domingo después del inicio de la cohorte (inicio más frecuente de sus grupos) hasta
+  el domingo de cierre (primer domingo en o después del último FECHA_FIN). Después la cohorte no genera más.
+- **Reconstrucción del pasado**: la primera corrida (manual, sin fecha) genera todos los domingos ya cumplidos.
+- **Fórmulas**: `HOY()`/`AHORA()` se cambian por la fecha del corte antes de congelar, para que ICP y estado salgan
+  como ese domingo.
+- **Configuración**: carpeta en una **unidad compartida**, con la cuenta de servicio como «Administrador de
+  contenido». ID en `[db_formacion] carpeta_cortes` (Secrets de Streamlit) y en la variable del repositorio
+  `DB_FORMACION_CARPETA_CORTES` (GitHub › Settings › Secrets and variables › Actions › Variables).
+- **A mano**: página «Bases de formación» (generar faltantes / rehacer uno) o
+  `python scripts/cortes_semanales.py [--listar | --corte AAAA-MM-DD [--forzar]]`.

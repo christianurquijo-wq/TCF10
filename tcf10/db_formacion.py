@@ -59,12 +59,13 @@ def ids_archivos() -> list[str]:
     return list(IDS_DEFECTO)
 
 
-def datos_app(hoy: pd.Timestamp | None = None) -> pd.DataFrame:
-    """Una fila por persona con huella del documento, grupo, fechas del grupo y horas completadas (como el tablero)."""
+def datos_app(hoy: pd.Timestamp | None = None, al_corte: bool = False) -> pd.DataFrame:
+    """Una fila por persona con huella del documento, grupo, fechas del grupo y horas completadas (como el tablero).
+    al_corte=True: horas, asistencia y retiros reconstruidos hasta el día `hoy` incluido (cortes semanales)."""
     from tcf10 import data, metrics
     from tcf10.ui import hoy_real
     hoy = hoy or hoy_real()
-    benef, avance, cohortes, _ = data.cargar()
+    benef, avance, cohortes, _ = data.cargar(hoy if al_corte else None)
     df = metrics.preparar(benef, avance, cohortes, hoy)
     if "huella" not in df:
         raise RuntimeError("La app está en modo demostración o sin la base de Formalización: no hay documentos para "
@@ -100,13 +101,39 @@ def _fila_titulos(valores: list[list[str]]) -> int:
     raise ValueError("No encontré la fila de títulos (columna NUMERO_DOCUMENTO).")
 
 
-def actualizar_libro(gc, sheet_id: str, app: pd.DataFrame, hoy: pd.Timestamp, log=print) -> dict:
-    from gspread.utils import rowcol_to_a1
-    from tcf10.base_atenea import huella
-    libro = gc.open_by_key(sheet_id)
+def hoja_seguimiento(libro):
     ws = next((w for w in libro.worksheets() if _plano(w.title).startswith(_plano("Seg.Formación"))), None)
     if ws is None:
         raise ValueError(f"{libro.title}: no tiene una pestaña «Seg.Formación…».")
+    return ws
+
+
+def documentos(ws) -> pd.Series:
+    """Huellas de los documentos de la pestaña Seg.Formación (para saber qué personas son de cada cohorte)."""
+    from tcf10.base_atenea import huella
+    valores = ws.get_all_values()
+    t = _fila_titulos(valores)
+    j = {_plano(c): k for k, c in enumerate(valores[t])}[_plano(COLUMNAS["documento"])]
+    docs = pd.Series([f[j] for f in valores[t + 1:] if j < len(f) and str(f[j]).strip()])
+    return huella(docs).dropna()
+
+
+def actualizar_libro(gc, sheet_id: str, app: pd.DataFrame, hoy: pd.Timestamp, log=print) -> dict:
+    libro = gc.open_by_key(sheet_id)
+    ws = hoja_seguimiento(libro)
+    res = escribir_seguimiento(ws, app, hoy)
+    sin_cruce = res.pop("_sin_cruce")
+    _control(libro, sin_cruce, hoy)
+    res = {"archivo": libro.title, **res}
+    log(f"{res['archivo']} · {res['pestana']}: {res['personas']} personas, {res['sin_cruce']} sin cruce, "
+        f"semana {res['semana']}")
+    return res
+
+
+def escribir_seguimiento(ws, app: pd.DataFrame, hoy: pd.Timestamp) -> dict:
+    """Escribe grupo, fechas, horas y % (N:S) y la semana (N3) en la pestaña Seg.Formación `ws`."""
+    from gspread.utils import rowcol_to_a1
+    from tcf10.base_atenea import huella
     valores = ws.get_all_values()
     t = _fila_titulos(valores)
     titulos = {_plano(c): j for j, c in enumerate(valores[t])}
@@ -150,15 +177,11 @@ def actualizar_libro(gc, sheet_id: str, app: pd.DataFrame, hoy: pd.Timestamp, lo
         for i in range(0, len(datos), 3000):
             ws.batch_update(datos[i:i + 3000], value_input_option="USER_ENTERED")
     ws.update(range_name="N3", values=[[semana]], value_input_option="USER_ENTERED")
-    _control(libro, sin_cruce, hoy)
-    res = {"archivo": libro.title, "pestana": ws.title, "personas": int(sum(1 for d in docs if str(d).strip())),
-           "sin_cruce": len(sin_cruce), "semana": semana}
-    log(f"{res['archivo']} · {res['pestana']}: {res['personas']} personas, {res['sin_cruce']} sin cruce, "
-        f"semana {semana}")
-    return res
+    return {"pestana": ws.title, "personas": int(sum(1 for d in docs if str(d).strip())),
+            "sin_cruce": len(sin_cruce), "semana": semana, "_sin_cruce": sin_cruce}
 
 
-def _control(libro, sin_cruce: list[list[str]], hoy: pd.Timestamp) -> None:
+def _control(libro, sin_cruce: list[list[str]], hoy: pd.Timestamp, titulo: str | None = None) -> None:
     import gspread
     try:
         ws = libro.worksheet(PESTANA_CONTROL)
@@ -166,7 +189,8 @@ def _control(libro, sin_cruce: list[list[str]], hoy: pd.Timestamp) -> None:
         ws = libro.add_worksheet(PESTANA_CONTROL, rows=max(100, len(sin_cruce) + 5), cols=3)
     ws.clear()
     marca = pd.Timestamp.now(tz="America/Bogota").strftime("%Y-%m-%d %H:%M")
-    filas = [[f"Actualizado {marca} · {len(sin_cruce)} personas sin cruce (grupo y fechas vacíos, 0 h)", "", ""],
+    titulo = titulo or f"Actualizado {marca}"
+    filas = [[f"{titulo} · {len(sin_cruce)} personas sin cruce (grupo y fechas vacíos, 0 h)", "", ""],
              ["NUMERO_DOCUMENTO", "Motivo", ""]] + [r + [""] for r in sin_cruce]
     ws.update(range_name="A1", values=filas, value_input_option="RAW")
 
