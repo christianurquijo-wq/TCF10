@@ -7,14 +7,15 @@ Una sola app con dos vistas:
   * Vista Atenea (por defecto): navegación superior, banda institucional con filtros; nombre y documento de los
     participantes, sin montos ni riesgo. Ingreso con usuario/contraseña ([atenea.usuarios]) o Google.
   * Vista interna (Kuepa): metas y pagos, avance y estado de formación, cohortes y equipo, asistencia y plataforma, grupos y
-    casos críticos (con la tipificación por estudiante), consulta por participante y metodología.
+    casos críticos (con la tipificación por estudiante), consulta por participante y metodología, más el botón
+    flotante «Asistente de datos» (vista_atenea/asistente.py) para consultas puntuales con cifra y CSV.
     Solo la ven los correos de Google listados en [atenea] internos: para ellos el sello «Operado por Kuepa» de la
     banda es un enlace a la vista interna (para el resto es solo el sello; no hay botón visible).
 """
 import streamlit as st
 
 from tcf10 import ui
-from vista_atenea import acceso, comun, estilo, legal, seguridad
+from vista_atenea import acceso, asistente, comun, estilo, legal, seguridad
 
 st.set_page_config(page_title="Talento Capital F10", page_icon="assets/atenea_icono.png", layout="wide",
                    initial_sidebar_state="collapsed")
@@ -110,6 +111,9 @@ if interna:
         if correo:
             pie[4].button("Salir", icon=":material/logout:", on_click=acceso.cerrar_sesion, args=(sesion,),
                           width="stretch")
+    # Botón flotante «Asistente de datos» (consultas puntuales con cifra y CSV): en todas las páginas internas.
+    # Va antes de nav.run() porque algunas páginas terminan con st.stop().
+    asistente.boton_flotante()
 else:
     # Banda institucional con los filtros globales (aplican a todas las páginas de la vista Atenea)
     with st.container(key="banda"):

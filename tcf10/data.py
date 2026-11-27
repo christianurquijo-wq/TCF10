@@ -744,6 +744,82 @@ def detalle_persona(id_sis: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     return ses.reset_index(drop=True), cur.reset_index(drop=True)
 
 
+# ------------------------------------------------------------------ asistente de datos (solo vista interna)
+TEL_PREFERIDAS = ["CELULAR", "NUMERO_CELULAR", "TELEFONO_CELULAR", "TELEFONO_MOVIL", "TELEFONO", "TELEFONO_CONTACTO",
+                  "NUMERO_TELEFONO", "TELEFONO 1"]
+CORREO_PREFERIDAS = ["CORREO_ELECTRONICO", "CORREO", "EMAIL", "E_MAIL", "CORREO ELECTRONICO"]
+
+
+def contactos() -> pd.DataFrame:
+    """Teléfono y correo por huella del documento (en demo, por id_sis), para las listas del asistente de datos de la
+    vista interna. Se leen de la base de Formalización ya cargada en memoria y nunca se guardan: solo se unen a las
+    filas que se descargan. attrs["origen"] dice de qué columnas salieron (para verificarlo en pantalla)."""
+    from tcf10 import base_atenea as B
+    if modo_demo():
+        demo = pd.read_csv(DEMO / "beneficiarios.csv", dtype=str)
+        out = pd.DataFrame({"id_sis": pd.to_numeric(demo["ID SIS"]).astype("Int64"),
+                            "telefono": "300" + demo["ID SIS"].str[-7:].str.zfill(7),
+                            "correo": "beneficiario" + demo["ID SIS"] + "@correo.demo"})
+        out.attrs["origen"] = "datos de demostración"
+        return out
+    crudo = _formalizacion_cruda()
+    planos = {B._plano(c): c for c in crudo.columns}
+
+    def buscar(preferidas: list[str], contiene: tuple[str, ...]) -> tuple[pd.Series, str]:
+        for p in preferidas:
+            if B._plano(p) in planos:
+                return crudo[planos[B._plano(p)]], planos[B._plano(p)]
+        for k, c in planos.items():  # p. ej. «CELULAR BENEFICIARIO»; se evitan los de acudientes o referencias
+            if any(x in k for x in contiene) and not any(x in k for x in ("acudiente", "referencia", "contacto emergencia")):
+                return crudo[c], c
+        return pd.Series([""] * len(crudo), index=crudo.index), ""
+
+    tel, col_tel = buscar(TEL_PREFERIDAS, ("celular", "telefono", "movil"))
+    cor, col_cor = buscar(CORREO_PREFERIDAS, ("correo", "email"))
+    out = pd.DataFrame({
+        "huella": B.huella(crudo[planos[B._plano("NUMERO_DOCUMENTO")]]),
+        "telefono": tel.astype("string").fillna("").str.strip().str.replace(r"\.0$", "", regex=True),
+        "correo": cor.astype("string").fillna("").str.strip().str.lower(),
+    }).dropna(subset=["huella"]).drop_duplicates("huella")
+    out.attrs["origen"] = f"teléfono: {col_tel or 'no encontrado'} · correo: {col_cor or 'no encontrado'}"
+    return out
+
+
+def asistencia_detalle(corte: pd.Timestamp | None = None) -> pd.DataFrame:
+    """Una fila por persona × sesión (id_sis, grupo, sesion, fecha, estado_asistencia: Asistió / No asistió /
+    Sin registro / Programada). Para «Quién faltó a clase» del asistente de datos."""
+    import numpy as np
+    if modo_demo():
+        d = _asistencia_detalle_demo()
+    else:
+        t = _sis_sheet(_esquema_sis())["asis_det"]
+        estado = np.select([t["attended"] > 0, t["not_attended"] > 0, t["is_past_session"].astype(bool)],
+                           ["Asistió", "No asistió", "Sin registro"], "Programada")
+        d = pd.DataFrame({"id_sis": t["id_sis"], "grupo": t["group_name"], "sesion": t["session_number"],
+                          "fecha": pd.to_datetime(t["session_date"], errors="coerce"), "estado_asistencia": estado})
+    if corte is not None:
+        d = d[d["fecha"].dt.normalize() <= pd.Timestamp(corte).normalize()]
+    return d.reset_index(drop=True)
+
+
+def _asistencia_detalle_demo() -> pd.DataFrame:
+    import numpy as np
+    rng = np.random.default_rng(12)
+    benef = limpiar_beneficiarios(pd.read_csv(DEMO / "beneficiarios.csv", dtype=str))
+    benef = benef[benef["enrolado"]]
+    asis, _ = _agregados_demo(tuple(int(i) for i in benef["id_sis"].dropna()))
+    filas = []
+    for grupo, ses in asis.groupby("grupo"):
+        for i in benef.loc[benef["grupo"].eq(grupo), "id_sis"].dropna():
+            constancia = rng.uniform(.4, .95)
+            for _, s in ses.iterrows():
+                r = rng.random()
+                estado = "Asistió" if r < constancia else ("No asistió" if r < .97 else "Sin registro")
+                filas.append({"id_sis": int(i), "grupo": grupo, "sesion": int(s["sesion"]), "fecha": s["fecha"],
+                              "estado_asistencia": estado})
+    return pd.DataFrame(filas, columns=["id_sis", "grupo", "sesion", "fecha", "estado_asistencia"])
+
+
 # ------------------------------------------------------------------ agregados del SIS (página de asistencia)
 def agregados(ids: tuple[int, ...], corte: pd.Timestamp | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """(asistencia por grupo × sesión, progreso por grupo × curso). En demo se generan sintéticos. Con `corte`, solo

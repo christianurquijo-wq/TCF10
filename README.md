@@ -34,3 +34,21 @@ La app es pública por enlace: **nunca** muestra nombre, documento, correo ni te
 
 ## Parámetros del contrato
 Todo en `tcf10/config.py` (cupos, valor, horas, metas, % de pagos, umbrales de riesgo). Cambiar ahí, no en las páginas.
+
+## Asistente de datos (vista interna)
+
+Botón flotante **«Asistente de datos»** en todas las páginas de la vista interna (`vista_atenea/asistente.py`; lógica
+en `tcf10/consultas.py`, pruebas en `tests/test_consultas.py`). Sin IA: las cifras salen de la misma tabla que las
+páginas internas.
+
+- **Consultas frecuentes** (conversación guiada): solo les falta plataforma, 1 o 2 clases + plataforma, no alcanzan
+  el 70 %, casos críticos, sin actividad desde una fecha, formalizados sin SIS, lista por estado, Feedbacks
+  pendientes, quién faltó a clase, asistencia por grupo y fecha, resumen por cohorte/grupo/docente/franja/programa y
+  distribución por estado, ruta o Feedbacks. Cada una se puede acotar con «Más filtros».
+- **Constructor**: qué necesitas + universo + filtros combinables (cohorte, programa, nivel, grupo, franja, docente,
+  gestor, estado, ruta, Feedbacks, caracterización, marcas de caso crítico, rangos de horas/ICP/días y fechas).
+- **Fecha de corte** propia (por defecto la de la banda) y **rango de fechas** para asistencia.
+- **CSV** para Excel en español («;», coma decimal, UTF-8 con BOM). Las listas traen documento, nombre, teléfono y
+  correo (columnas de la base de Formalización; la ventana muestra de qué columnas salieron) y cada descarga queda en
+  el registro de seguridad con el usuario y los filtros.
+- **Discapacidad** (dato sensible): solo en resumen y distribución, con conteos de 1 a 4 como «< 5»; nunca en listas.
